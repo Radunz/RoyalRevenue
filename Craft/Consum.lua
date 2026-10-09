@@ -111,20 +111,18 @@ local function Activity(char)
 end
 Consum.Activity = Activity
 
--- entre as qualidades do item: a melhor que não custa mais de 50% acima da mais barata
+-- qualidade das sugestões (botão na barra "Sugestão"): 1 ou 2, quando o item tem as duas
+function Consum.Quality() return math.max(1, math.min(2, tonumber(LucroCraftDB.config.consQuality) or 1)) end
+function Consum.SetQuality(n)
+	LucroCraftDB.config = LucroCraftDB.config or {}
+	LucroCraftDB.config.consQuality = math.max(1, math.min(2, math.floor(tonumber(n) or 1)))
+	if ns.Buy and ns.Buy.Refresh then ns.Buy.Refresh() end
+end
+
+-- entre as qualidades do item: a escolhida em Consum.Quality(); item com só 1 ID não tem escolha
 local function Pick(ids)
-	local P = ns.Pricing
-	local best, bestQ, cheapest
-	for _, id in ipairs(ids) do
-		local p = P.Cost(id) or P.Sale(id)
-		if p and (not cheapest or p < cheapest) then cheapest = p end
-	end
-	for _, id in ipairs(ids) do
-		local p = P.Cost(id) or P.Sale(id)
-		local q = C_TradeSkillUI and C_TradeSkillUI.GetItemCraftedQualityByItemInfo and C_TradeSkillUI.GetItemCraftedQualityByItemInfo(id) or 0
-		if p and (not cheapest or p <= cheapest * 1.5) and (not best or (q or 0) > bestQ) then best, bestQ = id, q or 0 end
-	end
-	return best or ids[1]
+	if #ids <= 1 then return ids[1] end
+	return ids[math.min(#ids, Consum.Quality())]
 end
 Consum.Pick = Pick
 
@@ -245,10 +243,9 @@ function Consum.Groups(me, allChars, usedGroups)
 				for _, x in ipairs(s.ids) do own = own + C.own(char, x) end
 				local wb = 0
 				for _, x in ipairs(s.ids) do wb = wb + C.warband(x) end
-				local m = { key = id, ids = s.ids, buyId = id, need = s.need, uses = {}, own = own, wb = math.min(wb, math.max(0, s.need - own)),
-					alts = 0, queue = true, note = s.note, why = s.why }
+				local m = { key = id, ids = { id }, buyId = id, need = s.need, uses = {}, own = own, wb = math.min(wb, math.max(0, s.need - own)),
+					alts = 0, queue = true, note = s.note, why = s.why, hasQuality = #s.ids > 1 }
 				m.buy = math.max(0, s.need - own - m.wb)
-				if #s.ids > 1 then m.variants = s.ids end
 				table.insert(g.order, m)
 			end
 		end

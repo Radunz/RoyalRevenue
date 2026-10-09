@@ -602,19 +602,6 @@ function Buy.Build()
 			m.cost = m.buy * m.unitEff
 			m.costTyp = m.buy * (m.a.typical or m.a.now or 0)
 			g.cost = g.cost + m.cost
-			-- consumível com mais de uma qualidade: preço/selo/fabricar de cada uma (compra é uma OU outra)
-			if m.variants and m.buy > 0 then
-				m.vdata = {}
-				for _, vid in ipairs(m.variants) do
-					local va = Buy.Analyze(vid)
-					local vc = craftMap[vid]
-					local vbest = vc and vc.unit and vc.unit > 0 and { unit = vc.unit, name = vc.name, char = vc.char } or nil
-					local vref = va.outlier and va.typical or va.now
-					local vCraftBetter = vbest and vref and vref > 0 and vbest.unit < vref * 0.97
-					local vUnitEff = (vCraftBetter and vbest and vbest.unit) or vref or 0
-					table.insert(m.vdata, { id = vid, a = va, craft = vbest, craftBetter = vCraftBetter, cost = m.buy * vUnitEff })
-				end
-			end
 			if m.buy > 0 then
 				res.nBuy = res.nBuy + 1
 				if m.a.signal == "buy" then res.nGreen = res.nGreen + 1 end
@@ -1074,7 +1061,18 @@ function Buy.Render(cv)
 			px = px + 28
 		end
 		if g.sugg then
-			lc:Text(px + 90, y + 9, string.format(L["|cff9d9d9dmelhor de cada tipo · %.1f h e %d chefes em masmorra/raide/imersão (14 dias)|r"], g.hours or 0, g.runs or 0), GameFontHighlightSmall, X_COST - px - 110)
+			lc:Text(px + 90, y + 9, string.format(L["|cff9d9d9dmelhor de cada tipo · %.1f h e %d chefes em masmorra/raide/imersão (14 dias)|r"], g.hours or 0, g.runs or 0), GameFontHighlightSmall, X_COST - px - 210)
+			-- qualidade das sugestões (quando o consumível tiver 2): troca para todos os personagens
+			if ns.Consum then
+				local qn = ns.Consum.Quality()
+				local qx = X_COST - 160
+				lc:Box(qx, y + 5, 90, 20, 0.17, 0.36, 0.66, 0.35)
+				lc:Text(qx, y + 8, string.format(L["Qualidade: %d"], qn), GameFontHighlightSmall, 90, "CENTER")
+				lc:Hit(qx, y + 5, 90, 20, function() ns.Consum.SetQuality(qn == 1 and 2 or 1) end, function(tt)
+					tt:SetText(L["Qualidade das sugestões"])
+					tt:AddLine(L["Clique para trocar entre as duas qualidades, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."], 1, 1, 1, true)
+				end)
+			end
 		elseif g.cons then
 			lc:Text(px + 8, y + 9, string.format(L["|cff9d9d9d%d consumíveis usados em masmorra, raide e imersão (14 dias) · repor para %d dias|r"], #g.order, Buy.ConsDays()), GameFontHighlightSmall, X_COST - px - 30)
 		else
@@ -1118,31 +1116,7 @@ function Buy.Render(cv)
 			end
 			if m.note then stock = "|cff66ccff" .. m.note .. "|r|cff9d9d9d · " .. stock end
 			lc:Text(X_NAME, y + 22, "|cff9d9d9d" .. stock .. "|r", GameFontDisableSmall, X_PRICE - X_NAME - 8)
-			if not have and m.vdata then
-				-- mais de uma qualidade (ex.: consumíveis): duas opções de compra lado a lado, na mesma linha
-				local optW = math.floor((X_COST + 122 - X_PRICE - 10) / #m.vdata)
-				for i, v in ipairs(m.vdata) do
-					local ox = X_PRICE + (i - 1) * (optW + 10)
-					local va = v.a
-					local rarity2 = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(v.id) or nil
-					lc:Icon(ox, y + 2, 26, ns.Visual.ItemIcon(v.id), { rarity = rarity2, link = select(2, C_Item.GetItemInfo(v.id)),
-						tip = function(tt)
-							tt:SetItemByID(v.id)
-							tt:AddLine(" ")
-							tt:AddDoubleLine(L["Preço agora"], va.now and P.FormatMoney(va.now) or "—", 1, 0.82, 0, 1, 1, 1)
-							tt:AddDoubleLine(L["Preço típico (7 dias)"], va.typical and P.FormatMoney(va.typical) or "—", 1, 0.82, 0, 1, 1, 1)
-							if v.craft then
-								tt:AddDoubleLine(L["Custo de fabricar"], P.FormatMoney(v.craft.unit) .. L["/un"], 0.4, 0.8, 1, 1, 1, 1)
-								if v.craftBetter then tt:AddLine(L["Fabricar sai mais barato."], 0.4, 0.8, 1, true) end
-							end
-						end })
-					lc:Text(ox + 30, y + 1, ns.Visual.ItemName(v.id), GameFontHighlightSmall, optW - 30)
-					local vtxt = va.now and ((va.outlier and "|cffff9933" or "") .. G(va.now) .. (va.outlier and "|r" or "")) or "|cff9d9d9d—|r"
-					if v.craftBetter then vtxt = vtxt .. string.format(L[" · |cff66ccfffabricar %s|r"], G(v.craft.unit)) end
-					lc:Text(ox + 30, y + 15, vtxt, GameFontDisableSmall, optW - 30)
-					Buy.DrawBuyButton(lc, ox, y + 21, optW, v.id, m.buy)
-				end
-			elseif not have then
+			if not have then
 				-- preço agora e diferença do típico
 				lc:Text(X_PRICE, y + 6, a.now and ((a.outlier and "|cffff9933" or "") .. G(a.now) .. (a.outlier and "|r" or "")) or "|cff9d9d9d—|r", GameFontHighlightSmall, 120, "RIGHT")
 				if a.outlier then

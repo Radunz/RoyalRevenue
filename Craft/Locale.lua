@@ -1306,5 +1306,8 @@ local T = {
 	["Recarregar"] = "Reload",
 	["|cffffd100Idioma alterado: clique em Recarregar (ou /reload) para aplicar.|r"] = "|cffffd100Language changed: click Reload (or /reload) to apply.|r",
 	["Idioma dos textos do addon. Automático = o mesmo do jogo. A mudança vale depois de recarregar a interface."] = "Language of the addon's texts. Automatic = same as the game. The change applies after reloading the UI.",
+	["Qualidade: %d"] = "Quality: %d",
+	["Qualidade das sugestões"] = "Suggestion quality",
+	["Clique para trocar entre as duas qualidades, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."] = "Click to switch between the two qualities, for consumables that have them (e.g. health potion, mana potion, food, weapon oil).",
 }
 for k, v in pairs(T) do L[k] = v end

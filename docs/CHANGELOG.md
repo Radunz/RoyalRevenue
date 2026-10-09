@@ -571,9 +571,9 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - Nome de item ainda não carregado ("item 274781"): V.ItemName pede ao servidor e redesenha a aba quando chega (como os ícones). Usado em Comprar, Fila, Plano, Vender e Receitas.
 - Teste: t93.lua (14 dias a 20g com 3 dias de 11.111g e agora 11.111g → típico 20g, fora do normal, ESPERE, dias entre −21% e +93%). t2 (terça −10% / sábado +8%) continua igual.
 
-## v1.26.0 — Consumíveis: as duas qualidades na mesma linha (pedido do Rafael)
-- Causa: `Consum.Pick` escolhe a melhor qualidade comparando `GetItemCraftedQualityByItemInfo`, mas os consumíveis com 2 IDs (poção de vida, de mana, comida, óleo de arma, Emergency Soul Link, banquete) não são itens de qualidade fabricada — a API sempre devolve 0 para os dois, então o "maior" nunca vence e a função ficava sempre com `ids[1]` (a 1ª qualidade).
-- Consum.lua (`Groups`): "tem" e "precisa" passam a somar as duas qualidades (uma vale pela outra); `m.ids` leva as duas (antes só a escolhida) e `m.variants` marca a linha para a UI.
-- Buy.lua (`Build`): com `m.variants`, calcula preço, selo e custo de fabricar de cada qualidade separadamente (`m.vdata`), com a mesma quantidade a comprar (é uma OU outra, não as duas somadas).
-- Buy.lua (`Render`): linha com `m.vdata` mostra as duas opções lado a lado (ícone, nome, preço agora com aviso de fabricar mais barato, botão de comprar cada uma) em vez da coluna única de preço/selo/dias/custo.
-- Teste: conferido com o SavedVariables real (sv11) — poção de vida (271883/271884) aparece com preços bem diferentes (130.000c vs 1.337.800c) e a aba desenha sem erro; comida (242747/242275) com uma das qualidades sem preço também desenha sem erro.
+## v1.26.0 — Consumíveis: botão de qualidade na barra "Sugestão" (pedido do Rafael)
+- Causa: `Consum.Pick` escolhia a melhor qualidade comparando `GetItemCraftedQualityByItemInfo`, mas os consumíveis com 2 IDs (poção de vida, de mana, comida, óleo de arma, Emergency Soul Link, banquete) não são itens de qualidade fabricada — a API sempre devolve 0 para os dois, então a comparação nunca decidia e a função ficava sempre com `ids[1]` (a 1ª qualidade).
+- 1ª tentativa (revertida: "ficou muito ruim"): mostrar as duas qualidades lado a lado em cada linha. Trocado por um botão só, na barra "Sugestão".
+- Consum.lua: `Consum.Quality()`/`SetQuality(n)` (1 ou 2, `LucroCraftDB.config.consQuality`, padrão 1). `Pick(ids)` usa essa escolha quando o item tem as 2 (senão a única que existir). "Tem"/"precisa" somam as duas qualidades (uma vale pela outra), mas a linha mostra só a qualidade escolhida (`m.ids = { id }`, como antes da v1.26.0); `m.hasQuality` marca que esse consumível tem escolha.
+- Buy.lua (`Render`): botão "Qualidade: 1/2" na barra "Sugestão" (clique alterna; vale pra todos os personagens, é uma configuração só). Linha de cada material volta a ter 1 ícone/preço/selo/custo/botão de comprar, como antes.
+- Teste: conferido com o SavedVariables real (sv11) — trocar a qualidade muda o item escolhido (poção de vida 271883 ↔ 271884, comida 242747 ↔ 242275) e a aba continua desenhando sem erro nas duas qualidades.
