@@ -1309,5 +1309,6 @@ local T = {
 	["Qualidade %d"] = "Quality %d",
 	["Qualidade das sugestões"] = "Suggestion quality",
 	["Clique: escolher, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."] = "Click: choose, for consumables that have it (e.g. health potion, mana potion, food, weapon oil).",
+	["Item vinculado (não vai para a casa de leilões): fora do % de vendas e da curva ABC"] = "Bound item (can't go to the auction house): excluded from the sales % and the ABC curve",
 }
 for k, v in pairs(T) do L[k] = v end

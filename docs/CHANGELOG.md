@@ -590,3 +590,10 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - Redimensionar a alça de uma janela aplica o novo tamanho na outra na hora, se ela já existir (`root.ApplyLivroSize()` / `root.ApplyCraftSize()`). Abrir o Livro-caixa (`OnShow`) também confere o tamanho compartilhado, pro caso de ter mudado com a janela fechada.
 - `/rr reset`: volta as duas pro tamanho padrão de cada uma (limpa `RoyalRevenueDB.winSize`), e ao centro da tela (posição continua por janela, não é compartilhada).
 - Teste: redimensionar o Craft pra 820×550 e chamar `ApplyLivroSize` deixou o Livro em 820×550 também; redimensionar o Livro e chamar `ApplyCraftSize` fez o Craft seguir (largura exata; altura limitada pela tela quando passa do que cabe, como já era antes).
+
+## v1.26.3 — Receitas: curva ABC só com item vinculável à AH (pedido do Rafael)
+- Antes, qualquer receita com venda/dia (`r.spd`) entrava na curva ABC e no % de vendas, mesmo que o item fabricado fosse vinculado (ao pegar ou ao bando/conta) e não pudesse ir pra casa de leilões de jeito nenhum.
+- Scanner.lua: `ns.IsAuctionable(itemID)` olha o tipo de vínculo (14º retorno do `GetItemInfo`, mesma classificação já usada em Comprar receitas — `BIND_BOP` = 1/4, `BIND_WARBAND` = 7/8/9); item ainda não carregado não exclui por engano (assume vinculável até saber). `ApplyABC` marca `r.notAuctionable` e tira esses itens do total e da lista antes de calcular A/B/C e o % — igual já acontecia com item também obtido por coleta (`r.gathered`).
+- UI.lua: tooltip novo explicando o "—" na coluna ABC quando é por causa do vínculo (separado do aviso de "também por coleta").
+- O resultado fabricado continua sendo o item da própria receita (`r.itemID`) — isso já era garantido pela forma como cada linha da lista de Receitas é montada; o que faltava era só o filtro de vinculável.
+- Teste: receita fabricando item vinculado (bind=1) com a maior venda/dia das três não participa da curva nem do %; as outras duas (sem vínculo) dividem 100% do % de vendas entre si normalmente.

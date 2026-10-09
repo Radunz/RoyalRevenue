@@ -382,12 +382,24 @@ function ns.ExcludedFromShare(r)
 	return Cfg("excludeGathered") and ns.IsGathered(r) or false
 end
 
+-- item vinculado (ao pegar ou ao bando/conta) nunca vai para a casa de leilões, então não entra
+-- na curva ABC nem no % de vendas, mesmo com giro (ex.: visão/estatística, item de missão).
+local BIND_BOP = { [1] = true, [4] = true }
+local BIND_WARBAND = { [7] = true, [8] = true, [9] = true }
+function ns.IsAuctionable(itemID)
+	if not itemID then return true end
+	local bind = select(14, C_Item.GetItemInfo(itemID))
+	if not bind then return true end -- item ainda não carregado: não exclui por engano
+	return not (BIND_BOP[bind] or BIND_WARBAND[bind])
+end
+
 local function ApplyABC(rows)
 	local list, total = {}, 0
 	for _, r in ipairs(rows) do
 		r.abc, r.spdShare = nil, nil
 		r.gathered = ns.ExcludedFromShare(r) or nil
-		if r.spd and r.spd > 0 and not r.gathered then
+		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
+		if r.spd and r.spd > 0 and not r.gathered and not r.notAuctionable then
 			table.insert(list, r)
 			total = total + r.spd
 		end

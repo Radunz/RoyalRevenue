@@ -699,6 +699,9 @@ local function ShowTooltip(row)
 	if r.gathered then
 		GameTooltip:AddLine(L["Item obtido também por coleta: fora do % de vendas e da curva ABC"], 0.6, 0.6, 0.6, true)
 	end
+	if r.notAuctionable then
+		GameTooltip:AddLine(L["Item vinculado (não vai para a casa de leilões): fora do % de vendas e da curva ABC"], 0.6, 0.6, 0.6, true)
+	end
 	if r.lowVolume then
 		GameTooltip:AddLine(string.format(L["Pouca venda: menos de %s por dia na região — pode não vender"],
 			tostring(Cfg("minSoldPerDay"))), 1, 0.5, 0, true)
