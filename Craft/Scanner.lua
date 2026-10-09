@@ -408,12 +408,15 @@ end
 --   mix  (r.mix.itemID, reagentes sup.)  -> r.mixAbc            · pelo lucro do próprio craft
 -- Assim Light's Potential Q1 (que dá prejuízo fabricado) fica sem classe, mesmo que o Q2 da
 -- mesma receita seja A — antes as duas linhas herdavam o abc da receita.
+-- Cada ABA tem a SUA curva, porque o recurso escasso é diferente em cada uma:
+--   Concentração     -> ouro por ponto de concentração (r.perConc)
+--   Sem concentração -> margem (lucro ÷ custo), o ouro que volta por ouro parado em material
 local function ApplyABC(rows)
-	local conc, total, spdTotal = {}, 0, 0
+	local conc, noconc, total, nTotal, spdTotal = {}, {}, 0, 0, 0
 	local minSpd = tonumber(Cfg("minSoldPerDay")) or 1
 	for _, r in ipairs(rows) do
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
-		r.concAbc, r.concAbcShare, r.mixAbc = nil, nil, nil
+		r.concAbc, r.concAbcShare, r.mixAbc, r.mixAbcShare = nil, nil, nil, nil
 		r.gathered = ns.ExcludedFromShare(r) or nil
 		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
 		-- sem concItemID, a concentração sai no MESMO item: o vínculo é o do item base
@@ -425,9 +428,16 @@ local function ApplyABC(rows)
 		end
 		if not r.gathered then
 			if (r.spd or 0) > 0 and not r.notAuctionable then spdTotal = spdTotal + r.spd end
-			-- resultado base: só entra se o craft normal der lucro (não gasta concentração = A)
+			-- resultado base (não gasta concentração): entra na curva da MARGEM
 			if not r.notAuctionable and (r.profit or 0) > 0 and (r.spd or 0) >= minSpd then
-				r.abc, r.abcFree = "A", true
+				r.abcFree = true
+				local m = (r.expCost and r.expCost > 0) and (r.profit / r.expCost) or nil
+				if m and m > 0 then
+					table.insert(noconc, { r = r, v = m, mix = false })
+					nTotal = nTotal + m
+				else
+					r.abc = "A"   -- sem custo conhecido não dá para ranquear pela margem
+				end
 			end
 			-- resultado com concentração: entra na curva do ouro/ponto
 			if not r.concNotAuctionable and r.perConc and r.perConc > 0
@@ -438,7 +448,13 @@ local function ApplyABC(rows)
 			-- qualidade de cima com reagentes melhores: também não gasta concentração
 			if r.mix and (r.mixProfit or 0) > 0 and (r.mixSpd or 0) >= minSpd
 				and ns.IsAuctionable(r.mix.itemID) then
-				r.mixAbc = "A"
+				local m = (r.mixExpCost and r.mixExpCost > 0) and (r.mixProfit / r.mixExpCost) or nil
+				if m and m > 0 then
+					table.insert(noconc, { r = r, v = m, mix = true })
+					nTotal = nTotal + m
+				else
+					r.mixAbc = "A"
+				end
 			end
 		end
 	end
@@ -448,14 +464,26 @@ local function ApplyABC(rows)
 			if not r.gathered and not r.notAuctionable and (r.spd or 0) > 0 then r.spdShare = r.spd / spdTotal end
 		end
 	end
+	local a, b = Cfg("abcA"), Cfg("abcB")
+	-- aba Concentração: ouro por ponto
 	table.sort(conc, function(x, y) return x.perConc > y.perConc end)
 	local cum = 0
-	local a, b = Cfg("abcA"), Cfg("abcB")
 	for _, r in ipairs(conc) do
 		local share = total > 0 and cum / total or 0
 		if share < a then r.concAbc = "A" elseif share < b then r.concAbc = "B" else r.concAbc = "C" end
 		cum = cum + r.perConc
 		r.concAbcShare = total > 0 and r.perConc / total or nil
+	end
+	-- aba Sem concentração: margem (lucro ÷ custo)
+	table.sort(noconc, function(x, y) return x.v > y.v end)
+	cum = 0
+	for _, it in ipairs(noconc) do
+		local share = nTotal > 0 and cum / nTotal or 0
+		local cls = (share < a) and "A" or ((share < b) and "B" or "C")
+		cum = cum + it.v
+		local sh = nTotal > 0 and it.v / nTotal or nil
+		if it.mix then it.r.mixAbc, it.r.mixAbcShare = cls, sh
+		else it.r.abc, it.r.abcShare = cls, sh end
 	end
 end
 Scanner.ApplyABC = ApplyABC
@@ -465,11 +493,10 @@ Scanner.ApplyABC = ApplyABC
 -- concentração, a qualidade superior também precisa vender pelo menos minSoldPerDay por dia.
 local ABC_RANK = { A = 1, B = 2, C = 3 }
 function ns.Recommendable(r, forConc)
-	-- classe do resultado pedido: com concentração = curva do ouro/ponto; sem = o craft normal
+	-- classe do resultado pedido: com concentração = curva do ouro/ponto; sem = curva da margem
 	local abc = forConc and r.concAbc or r.abc
-	-- fora da curva do ouro/ponto (também por coleta, ou lucro sem gastar concentração):
-	-- só vale o mínimo de vendas/dia
-	if r.gathered or (not forConc and r.abcFree) then
+	-- item de coleta fica fora das duas curvas: só vale o mínimo de vendas/dia
+	if r.gathered then
 		local spd = forConc and r.concSpd or r.spd
 		if (spd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1) then return false, L[" vende pouco"] end
 		return true
