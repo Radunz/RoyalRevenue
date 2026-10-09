@@ -296,7 +296,7 @@ function Plan.Render(cv)
 				local col = pct >= 0.999 and { 1, 0.25, 0.25 } or pct >= (tonumber(ns.Cfg("alertConcPct")) or 0.9) and { 1, 0.6, 0.1 } or { 0.25, 0.6, 1 }
 				local fullTxt = (it.fullIn and it.fullIn > 0) and (L["cheia em "] .. Hours(it.fullIn)) or L["cheia"]
 				cv:Bar(X_PROF + 38, sy + 22, 150, 13, it.est, e.conc.max or 1000, col,
-					string.format("%d/%d · %s", math.floor(it.est), e.conc.max or 0, fullTxt), nil, function(tt)
+					string.format("%s/%d · %s", ns.ConcStr(math.floor(it.est), e.professionID), e.conc.max or 0, fullTxt), nil, function(tt)
 						tt:SetText(L["Concentração"])
 						tt:AddDoubleLine(L["Estimada agora"], string.format("%d / %d", math.floor(it.est), e.conc.max or 0), 1, 0.82, 0, 1, 1, 1)
 						tt:AddDoubleLine(L["No último scan"], string.format(L["%d (há %s)"], e.conc.cur or 0, Hours(it.age)), 1, 0.82, 0, 1, 1, 1)
@@ -324,7 +324,7 @@ function Plan.Render(cv)
 								if r.concItemID then tt:SetItemByID(r.concItemID) else tt:SetText(r.name or "?") end
 								tt:AddLine(" ")
 								tt:AddDoubleLine(L["Fabricações"], tostring(u.crafts), 1, 0.82, 0, 1, 1, 1)
-								tt:AddDoubleLine(L["Concentração gasta"], tostring(math.floor(u.conc + 0.5)), 1, 0.82, 0, 1, 1, 1)
+								tt:AddDoubleLine(L["Concentração gasta"], ns.ConcStr(math.floor(u.conc + 0.5), e.professionID), 1, 0.82, 0, 1, 1, 1)
 								tt:AddDoubleLine(L["Lucro por ponto"], P.FormatMoney(r.perConc), 1, 0.82, 0, 1, 1, 1)
 								tt:AddDoubleLine(L["Lucro total"], P.FormatMoney(u.gold), 1, 0.82, 0, 0.3, 1, 0.3)
 								if r.concTrend then
@@ -382,7 +382,7 @@ function Plan.DrawHold(cv, x, sy, w, it)
 		quality = ns.QIcon(r.concQuality or 2, r.maxQuality, 12), tip = tip })
 	cv:Box(x + 46, sy + 5, 64, 18, 0.83, 0.69, 0.22, 0.95)
 	cv:Text(x + 46, sy + 8, "|cff14213d" .. L["SEGURE"] .. "|r", GameFontNormalSmall, 64, "CENTER")
-	cv:Text(x + 116, sy + 8, string.format(L["até %d de concentração · ~%s"], math.floor(hd.need + 0.5), Hours(hd.waitH)), GameFontHighlightSmall, w - 120)
+	cv:Text(x + 116, sy + 8, string.format(L["até %s · ~%s"], ns.ConcStr(math.floor(hd.need + 0.5), it.e and it.e.professionID), Hours(hd.waitH)), GameFontHighlightSmall, w - 120)
 	cv:Text(x + 46, sy + 28, string.format(L["|cff55ff55+%s|r vs. gastar agora em %s"], G(hd.extra), (hd.altUsed[1] and hd.altUsed[1].row.name) or "?"),
 		GameFontDisableSmall, w - 50)
 	cv:Hit(x + 46, sy + 4, w - 50, 40, nil, tip)

@@ -500,24 +500,31 @@ local function Eval(o)
 		end
 	end
 	x.parts = parts
-	-- recompensas do patrono (itens)
+	-- recompensas do patrono (itens e MOEDAS: o Moxie de cada profissão vem como currency, não item)
 	local rew, rewList, kp = 0, {}, 0
 	for _, rw in ipairs(o.npcOrderRewards or {}) do
 		-- link novo da Midnight ("|cnIQ1:|Hitem:...|h[]|h|r", às vezes sem nome): o id sai do próprio link
 		local id = rw.itemLink and (tonumber(rw.itemLink:match("item:(%d+)")) or C_Item.GetItemInfoInstant(rw.itemLink))
+		local curID = (not id) and rw.itemLink and tonumber(rw.itemLink:match("currency:(%d+)")) or nil
+		local icon
+		if curID and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+			local okC, info = pcall(C_CurrencyInfo.GetCurrencyInfo, curID)
+			if okC and type(info) == "table" then icon = info.iconFileID end
+		end
 		local v = id and ns.Pricing.Sale(id)
 		rew = rew + (v or 0) * (rw.count or 1)
 		local k = Queue.KnowledgeOf(rw.itemLink, id)
 		if k then kp = kp + k * (rw.count or 1) end
-		table.insert(rewList, { link = rw.itemLink, id = id, n = rw.count or 1, v = v, kp = k,
-			icon = nil })
+		table.insert(rewList, { link = rw.itemLink, id = id, currency = curID, n = rw.count or 1, v = v, kp = k,
+			icon = icon })
 	end
 	x.mat, x.miss, x.rew, x.rewList, x.kp = mat, miss, rew, rewList, kp
 	x.profit = x.tip - x.cut + rew - mat
-	-- pedido com qualidade mínima que pede concentração: mostra os pontos e desconta o valor deles
-	if r and (o.minQuality or 0) > 1 and Queue.OrderConc then
+	-- concentração do pedido: mostra os pontos sempre que a receita puder usar.
+	-- Só desconta do lucro quando ela é OBRIGATÓRIA para a qualidade mínima (x.concOpt = opcional).
+	if r and Queue.OrderConc then
 		Queue.OrderConc(x, { recipeID = o.spellID, char = ns.CharKey(), prof = e and e.professionID, given = given, custR = custR, minQ = o.minQuality, id = o.orderID })
-		if x.concValue then x.profit = x.profit - x.concValue end
+		if x.concValue and not x.concOpt then x.profit = x.profit - x.concValue end
 	end
 	return x
 end
@@ -730,13 +737,23 @@ function Queue.ConcPointValue(char, profID)
 	return best or 0, name
 end
 
--- concentração que o pedido pede e o custo dela em ouro (preenche x.concPts, x.concValue, x.unreach)
+-- concentração do pedido (preenche x.concPts, x.concValue, x.concOpt, x.unreach)
+-- Mostra o custo SEMPRE que a receita puder usar concentração, não só quando ela é obrigatória
+-- para a qualidade mínima: com minQuality 1 o pedido aceita a qualidade de baixo, mas a receita
+-- continua tendo custo de concentração (é o que o jogo e o CraftSim mostram). x.concOpt marca
+-- que é opcional — nesse caso o lucro não desconta os pontos (você escolhe se gasta).
 local function OrderConc(x, c)
-	if (c.minQ or 0) <= 1 then return end
 	local okP, conc, cost, q0, q1, reach = pcall(Queue.OrderPlan, c)
 	if not okP then return end
 	if conc and not reach then x.unreach = true; x.q0 = q0 return end
 	x.q0, x.q1 = q0, q1
+	if not conc then
+		-- não é obrigatória: pega o custo da receita escaneada (subir 1 qualidade)
+		local r = x.row
+		if r and r.concCost and r.concCost > 0 and (r.quality or 0) < (r.maxQuality or 0) then
+			cost, conc, x.concOpt = r.concCost, true, true
+		end
+	end
 	if conc and cost then
 		local per, from = Queue.ConcPointValue(c.char, c.prof)
 		x.concPts, x.concPer, x.concFrom = cost, per, from
@@ -996,15 +1013,17 @@ function Queue.Render(cv)
 			local vtxt = (VARIANT_COLOR[it.variant] or "") .. (VARIANT_LABEL[it.variant] or it.variant) .. "|r"
 			if it.source == "pedido" then
 				vtxt = "|cffff9e40" .. L["pedido"] .. " · " .. (it.order.type or "") .. (it.order.customer and (" · " .. it.order.customer) or "") .. "|r"
-				if it.char == me and (it.order.minQ or 0) > 1 then
-					local cx = {}
+				if it.char == me then
+					local cx = { row = r }
 					OrderConc(cx, it.order)
 					if cx.unreach then
 						vtxt = vtxt .. L[" |cffff5555qualidade mínima inalcançável|r"]
 					elseif cx.concPts then
-						vtxt = vtxt .. string.format(L[" |cff66ccffconcentração %d (≈%s)|r"], cx.concPts, G(cx.concValue or 0))
+						vtxt = vtxt .. " |cff66ccff" .. ns.ConcStr(cx.concPts, it.e and it.e.professionID)
+							.. (cx.concOpt and L[" (opcional)"] or string.format(" (≈%s)", G(cx.concValue or 0))) .. "|r"
 						-- pedido pego antes desta versão: o lucro guardado ainda não descontava a concentração
-						if not it.order.concValue and it.gold and cx.concValue then it.gold = it.gold - cx.concValue end
+						-- (só quando a concentração é obrigatória; opcional não desconta)
+						if not cx.concOpt and not it.order.concValue and it.gold and cx.concValue then it.gold = it.gold - cx.concValue end
 					end
 				end
 				vtxt = vtxt .. (it.order.crafted and (" |cff55ff55" .. L["fabricado, falta entregar"] .. "|r") or "")
@@ -1077,7 +1096,13 @@ function Queue.Render(cv)
 				tt:AddDoubleLine(L["Tipo"], x.type .. (x.customer and (" · " .. x.customer) or ""), 1, 0.82, 0, 1, 1, 1)
 				tt:AddDoubleLine(L["Comissão"], P.FormatMoney(x.tip), 1, 0.82, 0, 0.3, 1, 0.3)
 				if x.cut > 0 then tt:AddDoubleLine(L["Corte do consórcio"], "-" .. P.FormatMoney(x.cut), 1, 0.82, 0, 0.9, 0.5, 0.5) end
-				for _, rw in ipairs(x.rewList) do tt:AddDoubleLine((rw.n > 1 and (rw.n .. "x ") or "") .. ((rw.id and C_Item.GetItemNameByID(rw.id)) or rw.link or "?"), rw.v and P.FormatMoney(rw.v * rw.n) or "?", 1, 1, 1, 0.3, 1, 0.3) end
+				for _, rw in ipairs(x.rewList) do
+					local nome = (rw.id and C_Item.GetItemNameByID(rw.id))
+						or (rw.currency and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+							and (select(2, pcall(C_CurrencyInfo.GetCurrencyInfo, rw.currency)) or {}).name)
+						or rw.link or "?"
+					tt:AddDoubleLine((rw.n > 1 and (rw.n .. "x ") or "") .. nome, rw.v and P.FormatMoney(rw.v * rw.n) or "?", 1, 1, 1, 0.3, 1, 0.3)
+				end
 				tt:AddDoubleLine(L["Seus materiais"], "-" .. P.FormatMoney(x.mat) .. (x.miss and " (?)" or ""), 1, 0.82, 0, 0.9, 0.5, 0.5)
 				for _, pp in ipairs(x.parts or {}) do
 					local p = pp.part
@@ -1085,8 +1110,12 @@ function Queue.Render(cv)
 					tt:AddDoubleLine("   " .. (p.qty or 1) .. "x " .. nm, pp.given and L["|cff55ff55cliente|r"] or (p.unit and P.FormatMoney(p.unit * (p.qty or 1)) or "?"), 0.8, 0.8, 0.8, 1, 1, 1)
 				end
 				if x.concPts then
-					tt:AddDoubleLine(string.format(L["Concentração (%d pontos)"], x.concPts), "-" .. P.FormatMoney(x.concValue or 0), 0.4, 0.8, 1, 0.9, 0.5, 0.5)
+					tt:AddDoubleLine(string.format(L["Concentração (%s)"], ns.ConcStr(x.concPts, x.e and x.e.professionID)),
+						(x.concOpt and "" or "-") .. P.FormatMoney(x.concValue or 0), 0.4, 0.8, 1, 0.9, 0.5, 0.5)
 					tt:AddLine(string.format(L["   %s por ponto: o que a melhor receita (%s) renderia com eles"], P.FormatMoney(x.concPer or 0), x.concFrom or "?"), 0.6, 0.6, 0.6, true)
+					if x.concOpt then
+						tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
+					end
 				elseif x.unreach then
 					tt:AddLine(L["Nem com concentração chega na qualidade mínima com os reagentes mais baratos."], 1, 0.4, 0.4, true)
 				end
@@ -1104,7 +1133,9 @@ function Queue.Render(cv)
 			qc:Text(44, ly + 3, (r and "|cffffffff" or "|cff808080") .. (r and r.name or (C_Item.GetItemNameByID(id or 0) or "?")) .. "|r", GameFontHighlight, QW - 300)
 			qc:Text(44, ly + 19, "|cff9d9d9d" .. x.type .. (x.customer and (" · " .. x.customer) or "") .. (r and "" or (" · " .. L["receita que você não sabe"])) .. "|r"
 				.. ((x.kp or 0) > 0 and ("  |cff55ff55" .. string.format(L["+%d conhecimento"], x.kp) .. "|r") or "")
-				.. (x.concPts and string.format(L["  |cff66ccffconc %d|r"], x.concPts) or "") .. (x.unreach and L["  |cffff5555qualidade inalcançável|r"] or ""), GameFontDisableSmall, QW - 420)
+				.. (x.concPts and ("  |cff66ccff" .. ns.ConcStr(x.concPts, x.e and x.e.professionID)
+					.. (x.concOpt and L[" (opcional)"] or "") .. "|r") or "")
+				.. (x.unreach and L["  |cffff5555qualidade inalcançável|r"] or ""), GameFontDisableSmall, QW - 420)
 			-- recompensas do patrono (ícones; passe o mouse para ver)
 			local rx = QW - 400
 			-- recompensa que carregou depois de ler os pedidos: confere de novo se dá conhecimento
@@ -1116,9 +1147,12 @@ function Queue.Render(cv)
 			end
 			for ri, rw in ipairs(x.rewList or {}) do
 				if ri > 4 then break end
-				qc:Icon(rx, ly + 4, 24, V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
+				-- moeda (Moxie) tem o ícone dela, não o de item
+				qc:Icon(rx, ly + 4, 24, rw.icon or V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
 					border = rw.kp and { 0.3, 1, 0.3 } or nil, link = rw.link, tip = function(tt)
-						if rw.id then tt:SetItemByID(rw.id) elseif rw.link then tt:SetHyperlink(rw.link) end
+						if rw.currency and tt.SetCurrencyByID then tt:SetCurrencyByID(rw.currency)
+						elseif rw.id then tt:SetItemByID(rw.id)
+						elseif rw.link then tt:SetHyperlink(rw.link) end
 						tt:AddLine(" ")
 						if rw.kp then tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], rw.kp * rw.n), 0.3, 1, 0.3) end
 						tt:AddDoubleLine(L["Valor na AH"], rw.v and P.FormatMoney(rw.v * rw.n) or L["vinculado / sem preço"], 1, 0.82, 0, 1, 1, 1)

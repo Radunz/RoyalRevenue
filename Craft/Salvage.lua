@@ -1171,7 +1171,7 @@ function S.Render(cv)
 			if pj then
 				y = y + 6
 				cv:Box(0, y - 2, W, 18, 0.17, 0.36, 0.66, 0.25)
-				cv:Text(8, y + 1, string.format(L["|cffffd100Com concentração|r (%s pontos): sai %s"], root.Num(pj.conc, 0), Name(pj.row.concItemID)), GameFontNormalSmall, W - 16)
+				cv:Text(8, y + 1, string.format(L["|cffffd100Com concentração|r (%s): sai %s"], ns.ConcStr(pj.conc, pj.row and pj.row.skillLine), Name(pj.row.concItemID)), GameFontNormalSmall, W - 16)
 				y = y + 20
 				if pj.noValue then
 					cv:Text(16, y, L["|cff9d9d9dSem valor da qualidade de cima ainda: abra alguns baús dessa qualidade.|r"], GameFontHighlightSmall, W - 24)

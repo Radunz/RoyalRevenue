@@ -470,7 +470,8 @@ local function FillRow(row, r)
 			elseif r.concCost <= (entry.conc.max or 1000) then col = "|cffffd100"
 			else col = "|cffff5555" end
 		end
-		row.cols.concCost:SetText(col .. tostring(r.concCost) .. "|r")
+		local entrySL = entry and (entry.professionID or entry.skillLine)
+		row.cols.concCost:SetText(col .. ns.ConcStr(r.concCost, entrySL) .. "|r")
 	else
 		row.cols.concCost:SetText("|cff808080—|r")
 	end
@@ -689,7 +690,10 @@ local function ShowTooltip(row)
 	if r.concCost then
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine(L["|cff66ccffCom concentração > "] .. ns.QIcon(r.concQuality or 0, r.maxQuality) .. "|r")
-		local eff = r.concEff and r.concEff < r.concCost and string.format(L["%d (efetivo %.0f c/ ingenuity)"], r.concCost, r.concEff) or tostring(r.concCost)
+		local entrySL = (CurrentEntry() or {}).professionID
+		local eff = r.concEff and r.concEff < r.concCost
+			and string.format(L["%s (efetivo %.0f c/ ingenuity)"], ns.ConcStr(r.concCost, entrySL), r.concEff)
+			or ns.ConcStr(r.concCost, entrySL)
 		GameTooltip:AddDoubleLine(L["Custo em concentração"], eff, 1, 0.82, 0, 1, 1, 1)
 		if r.perConc then
 			GameTooltip:AddDoubleLine(L["Lucro por ponto de conc"], P.FormatMoney(r.perConc), 1, 0.82, 0, 1, 1, 1)

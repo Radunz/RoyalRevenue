@@ -84,6 +84,35 @@ function ns.QIcon(q, maxQ, size)
 	return out
 end
 
+-- ===== Ícone da concentração =====
+-- A concentração é uma MOEDA por profissão (C_TradeSkillUI.GetConcentrationCurrencyID), e o ícone
+-- é o dela — o mesmo que o jogo e o CraftSim mostram. Sem a API (ou profissão desconhecida),
+-- fica só o número, como era antes.
+local concTex = {}
+function ns.ConcTexture(skillLine)
+	local key = tonumber(skillLine) or 0
+	local c = concTex[key]
+	if c ~= nil then return c or nil end
+	local tex
+	if key > 0 and C_TradeSkillUI and C_TradeSkillUI.GetConcentrationCurrencyID then
+		local ok, cur = pcall(C_TradeSkillUI.GetConcentrationCurrencyID, key)
+		if ok and cur and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+			local ok2, info = pcall(C_CurrencyInfo.GetCurrencyInfo, cur)
+			if ok2 and type(info) == "table" and info.iconFileID then tex = info.iconFileID end
+		end
+	end
+	concTex[key] = tex or false
+	return tex
+end
+-- "<ícone> 179" para FontStrings e tooltips. n = nil mostra só o ícone.
+function ns.ConcStr(n, skillLine, size)
+	size = size or 14
+	local tex = ns.ConcTexture(skillLine)
+	local num = n and root.Num(n, 0) or ""
+	if not tex then return num end
+	return string.format("|T%s:%d:%d:0:0|t%s", tostring(tex), size, size, num ~= "" and (" " .. num) or "")
+end
+
 -- ===== Fontes de dados =====
 -- Ordem automática: TSM > Auctionator > LucroCraft (scan próprio da casa de leilões).
 -- A configuração priceSource pode forçar uma delas ("auto" | "TSM" | "Auctionator" | "LucroCraft").

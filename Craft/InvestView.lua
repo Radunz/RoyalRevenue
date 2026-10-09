@@ -1011,7 +1011,7 @@ function Invest.Render(cv)
 						(m.needTop or m.need) > m.room and { 1, 0.4, 0.4 } or { 0.3, 1, 0.3 })
 				end
 				Line(tt, L["Ganho por fabricação"], P.FormatMoney(m.gain), { 0.3, 1, 0.3 })
-				Line(tt, L["Concentração que custa hoje"], tostring(m.conc or 0))
+				Line(tt, L["Concentração que custa hoje"], ns.ConcStr(m.conc or 0, e and e.professionID))
 				Line(tt, L["Vendas/dia"], m.spd and root.Num(m.spd, 0) or "?")
 				if m.path and #m.path > 0 then
 					tt:AddLine(" ")
