@@ -402,23 +402,43 @@ end
 -- Por que não ponderar por vendas/dia: o spd é da REGIÃO (10 mil a 270 mil/dia), não o que você
 -- consegue vender. Usá-lo como volume fazia o Bouquet of Herbs (0,3 ouro/ponto, 270 mil vendas/dia,
 -- e ainda limitado a 2 cargas) virar 85% do "lucro da profissão" e jogava a curva toda em A.
+-- Cada RESULTADO é classificado pelo seu próprio item (id), não pela receita:
+--   base (r.itemID, sem concentração) -> r.abc / r.abcFree      · pelo lucro do próprio craft
+--   conc (r.concItemID, com concentração) -> r.concAbc          · pela curva do ouro/ponto
+--   mix  (r.mix.itemID, reagentes sup.)  -> r.mixAbc            · pelo lucro do próprio craft
+-- Assim Light's Potential Q1 (que dá prejuízo fabricado) fica sem classe, mesmo que o Q2 da
+-- mesma receita seja A — antes as duas linhas herdavam o abc da receita.
 local function ApplyABC(rows)
-	local list, free, total, spdTotal = {}, {}, 0, 0
+	local conc, total, spdTotal = {}, 0, 0
 	local minSpd = tonumber(Cfg("minSoldPerDay")) or 1
 	for _, r in ipairs(rows) do
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
+		r.concAbc, r.concAbcShare, r.mixAbc = nil, nil, nil
 		r.gathered = ns.ExcludedFromShare(r) or nil
 		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
-		if not r.gathered and not r.notAuctionable then
-			if (r.spd or 0) > 0 then spdTotal = spdTotal + r.spd end
-			if (r.spd or 0) >= minSpd then
-				if r.perConc and r.perConc > 0 then
-					table.insert(list, r)
-					total = total + r.perConc
-				elseif (r.profit or 0) > 0 then
-					r.abcFree = true
-					table.insert(free, r)
-				end
+		-- sem concItemID, a concentração sai no MESMO item: o vínculo é o do item base
+		local concItem = r.concItemID or r.itemID
+		if concItem == r.itemID then
+			r.concNotAuctionable = r.notAuctionable
+		else
+			r.concNotAuctionable = (not ns.IsAuctionable(concItem)) or nil
+		end
+		if not r.gathered then
+			if (r.spd or 0) > 0 and not r.notAuctionable then spdTotal = spdTotal + r.spd end
+			-- resultado base: só entra se o craft normal der lucro (não gasta concentração = A)
+			if not r.notAuctionable and (r.profit or 0) > 0 and (r.spd or 0) >= minSpd then
+				r.abc, r.abcFree = "A", true
+			end
+			-- resultado com concentração: entra na curva do ouro/ponto
+			if not r.concNotAuctionable and r.perConc and r.perConc > 0
+				and (r.concSpd or r.spd or 0) >= minSpd then
+				table.insert(conc, r)
+				total = total + r.perConc
+			end
+			-- qualidade de cima com reagentes melhores: também não gasta concentração
+			if r.mix and (r.mixProfit or 0) > 0 and (r.mixSpd or 0) >= minSpd
+				and ns.IsAuctionable(r.mix.itemID) then
+				r.mixAbc = "A"
 			end
 		end
 	end
@@ -428,16 +448,14 @@ local function ApplyABC(rows)
 			if not r.gathered and not r.notAuctionable and (r.spd or 0) > 0 then r.spdShare = r.spd / spdTotal end
 		end
 	end
-	-- lucro sem gastar concentração: sempre A (não compete pelos pontos)
-	for _, r in ipairs(free) do r.abc = "A" end
-	table.sort(list, function(x, y) return x.perConc > y.perConc end)
+	table.sort(conc, function(x, y) return x.perConc > y.perConc end)
 	local cum = 0
 	local a, b = Cfg("abcA"), Cfg("abcB")
-	for _, r in ipairs(list) do
+	for _, r in ipairs(conc) do
 		local share = total > 0 and cum / total or 0
-		if share < a then r.abc = "A" elseif share < b then r.abc = "B" else r.abc = "C" end
+		if share < a then r.concAbc = "A" elseif share < b then r.concAbc = "B" else r.concAbc = "C" end
 		cum = cum + r.perConc
-		r.abcShare = total > 0 and r.perConc / total or nil
+		r.concAbcShare = total > 0 and r.perConc / total or nil
 	end
 end
 Scanner.ApplyABC = ApplyABC
@@ -447,16 +465,18 @@ Scanner.ApplyABC = ApplyABC
 -- concentração, a qualidade superior também precisa vender pelo menos minSoldPerDay por dia.
 local ABC_RANK = { A = 1, B = 2, C = 3 }
 function ns.Recommendable(r, forConc)
+	-- classe do resultado pedido: com concentração = curva do ouro/ponto; sem = o craft normal
+	local abc = forConc and r.concAbc or r.abc
 	-- fora da curva do ouro/ponto (também por coleta, ou lucro sem gastar concentração):
 	-- só vale o mínimo de vendas/dia
-	if r.gathered or r.abcFree then
+	if r.gathered or (not forConc and r.abcFree) then
 		local spd = forConc and r.concSpd or r.spd
 		if (spd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1) then return false, L[" vende pouco"] end
 		return true
 	end
 	local min = ABC_RANK[(Cfg("recoMinABC") or "B"):upper()] or 2
-	local rank = r.abc and ABC_RANK[r.abc] or 99
-	if rank > min then return false, L["classe "] .. (r.abc or L["sem lucro"]) end
+	local rank = abc and ABC_RANK[abc] or 99
+	if rank > min then return false, L["classe "] .. (abc or L["sem lucro"]) end
 	-- participação mínima nas vendas da profissão (ex.: 1% = itens que realmente giram)
 	local minShare = tonumber(Cfg("recoMinShare")) or 0.01
 	if (r.spdShare or 0) < minShare then
@@ -817,7 +837,11 @@ function Scanner.FinalizeUnknown(unknownRows, knownRows, charKey)
 	for _, r in ipairs(unknownRows) do r.cost = r.buyCost + (r.boundExtra or 0); ComputeProfit(r) end
 	ApplyCraftedReagents(unknownRows, BuildCraftMap(knownRows, charKey))
 	ApplyStock(unknownRows)
-	for _, r in ipairs(unknownRows) do ComputeProfit(r); r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil end
+	for _, r in ipairs(unknownRows) do
+		ComputeProfit(r)
+		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
+		r.concAbc, r.concAbcShare, r.mixAbc = nil, nil, nil
+	end
 end
 
 -- Reprecifica o que está salvo (sem abrir a profissão): reagentes, venda, vendas/dia e tendência.

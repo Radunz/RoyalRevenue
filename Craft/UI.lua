@@ -175,6 +175,9 @@ local function Variants(r)
 			lowVolume = (r.concSpd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1),
 			trend = r.concTrend or false,
 			mySpd = (r.concItemID ~= r.itemID) and my(r.concItemID) or false,
+			-- classe do item de cima (curva do ouro/ponto), não a do item base
+			abc = r.concAbc or false, abcShare = r.concAbcShare or false, abcFree = false,
+			notAuctionable = r.concNotAuctionable or false,
 		}, VIEW_MT))
 	end
 	-- mesma qualidade de cima trocando reagentes pela qualidade superior (sem gastar concentração)
@@ -190,6 +193,8 @@ local function Variants(r)
 			lowVolume = (r.mixSpd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1),
 			trend = r.mixTrend or false,
 			mySpd = (r.mix.itemID ~= r.itemID) and my(r.mix.itemID) or false,
+			-- não gasta concentração: A quando o craft dá lucro
+			abc = r.mixAbc or false, abcShare = false, abcFree = r.mixAbc and true or false,
 		}, VIEW_MT))
 	end
 	-- revenda: item que o vendedor (NPC) vende e dá para anunciar na AH
@@ -207,6 +212,8 @@ local function Variants(r)
 			missing = false, usesCrafted = false, usesStock = false, excluded = false, parts = false, stats = false,
 			mix = false, craftable = false, trend = P.Trend(itemID) or false, mySpd = my(itemID),
 			lowVolume = (spd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1),
+			-- revenda do NPC só existe dando lucro, e não gasta concentração
+			abc = "A", abcShare = false, abcFree = true, notAuctionable = false,
 		}, VIEW_MT))
 	end
 	npc(r.itemID, r.quality, r.sale, r.spd)
