@@ -393,25 +393,51 @@ function ns.IsAuctionable(itemID)
 	return not (BIND_BOP[bind] or BIND_WARBAND[bind])
 end
 
+-- ===== Curva ABC: melhor uso da concentração =====
+-- Entra só receita que DÁ LUCRO (com concentração ou sem ela), cujo item vai para a AH e que tem
+-- giro (minSoldPerDay). Métrica = ouro por ponto de concentração (r.perConc): a ordem é a prioridade
+-- de gasto dos pontos e o corte A/B/C é pelo % acumulado desse ouro/ponto, então A = onde a
+-- concentração rende mais. Receita lucrativa que NÃO gasta concentração não disputa pontos: entra
+-- como A (lucro livre, r.abcFree).
+-- Por que não ponderar por vendas/dia: o spd é da REGIÃO (10 mil a 270 mil/dia), não o que você
+-- consegue vender. Usá-lo como volume fazia o Bouquet of Herbs (0,3 ouro/ponto, 270 mil vendas/dia,
+-- e ainda limitado a 2 cargas) virar 85% do "lucro da profissão" e jogava a curva toda em A.
 local function ApplyABC(rows)
-	local list, total = {}, 0
+	local list, free, total, spdTotal = {}, {}, 0, 0
+	local minSpd = tonumber(Cfg("minSoldPerDay")) or 1
 	for _, r in ipairs(rows) do
-		r.abc, r.spdShare = nil, nil
+		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
 		r.gathered = ns.ExcludedFromShare(r) or nil
 		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
-		if r.spd and r.spd > 0 and not r.gathered and not r.notAuctionable then
-			table.insert(list, r)
-			total = total + r.spd
+		if not r.gathered and not r.notAuctionable then
+			if (r.spd or 0) > 0 then spdTotal = spdTotal + r.spd end
+			if (r.spd or 0) >= minSpd then
+				if r.perConc and r.perConc > 0 then
+					table.insert(list, r)
+					total = total + r.perConc
+				elseif (r.profit or 0) > 0 then
+					r.abcFree = true
+					table.insert(free, r)
+				end
+			end
 		end
 	end
-	table.sort(list, function(a, b) return a.spd > b.spd end)
-	local cumBefore = 0
+	-- % das vendas da profissão: continua sobre as VENDAS (é o que o recoMinShare filtra)
+	if spdTotal > 0 then
+		for _, r in ipairs(rows) do
+			if not r.gathered and not r.notAuctionable and (r.spd or 0) > 0 then r.spdShare = r.spd / spdTotal end
+		end
+	end
+	-- lucro sem gastar concentração: sempre A (não compete pelos pontos)
+	for _, r in ipairs(free) do r.abc = "A" end
+	table.sort(list, function(x, y) return x.perConc > y.perConc end)
+	local cum = 0
 	local a, b = Cfg("abcA"), Cfg("abcB")
 	for _, r in ipairs(list) do
-		local share = cumBefore / total
+		local share = total > 0 and cum / total or 0
 		if share < a then r.abc = "A" elseif share < b then r.abc = "B" else r.abc = "C" end
-		cumBefore = cumBefore + r.spd
-		r.spdShare = r.spd / total
+		cum = cum + r.perConc
+		r.abcShare = total > 0 and r.perConc / total or nil
 	end
 end
 Scanner.ApplyABC = ApplyABC
@@ -421,15 +447,16 @@ Scanner.ApplyABC = ApplyABC
 -- concentração, a qualidade superior também precisa vender pelo menos minSoldPerDay por dia.
 local ABC_RANK = { A = 1, B = 2, C = 3 }
 function ns.Recommendable(r, forConc)
-	if r.gathered then
-		-- fora da curva ABC: só vale o mínimo de vendas/dia
+	-- fora da curva do ouro/ponto (também por coleta, ou lucro sem gastar concentração):
+	-- só vale o mínimo de vendas/dia
+	if r.gathered or r.abcFree then
 		local spd = forConc and r.concSpd or r.spd
 		if (spd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1) then return false, L[" vende pouco"] end
 		return true
 	end
 	local min = ABC_RANK[(Cfg("recoMinABC") or "B"):upper()] or 2
 	local rank = r.abc and ABC_RANK[r.abc] or 99
-	if rank > min then return false, L["classe "] .. (r.abc or L["sem vendas"]) end
+	if rank > min then return false, L["classe "] .. (r.abc or L["sem lucro"]) end
 	-- participação mínima nas vendas da profissão (ex.: 1% = itens que realmente giram)
 	local minShare = tonumber(Cfg("recoMinShare")) or 0.01
 	if (r.spdShare or 0) < minShare then
@@ -790,7 +817,7 @@ function Scanner.FinalizeUnknown(unknownRows, knownRows, charKey)
 	for _, r in ipairs(unknownRows) do r.cost = r.buyCost + (r.boundExtra or 0); ComputeProfit(r) end
 	ApplyCraftedReagents(unknownRows, BuildCraftMap(knownRows, charKey))
 	ApplyStock(unknownRows)
-	for _, r in ipairs(unknownRows) do ComputeProfit(r); r.abc, r.spdShare = nil, nil end
+	for _, r in ipairs(unknownRows) do ComputeProfit(r); r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil end
 end
 
 -- Reprecifica o que está salvo (sem abrir a profissão): reagentes, venda, vendas/dia e tendência.

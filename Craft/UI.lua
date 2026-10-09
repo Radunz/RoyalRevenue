@@ -665,6 +665,16 @@ local function ShowTooltip(row)
 		GameTooltip:AddDoubleLine(P.SpdIsEstimate() and L["Vendas/dia (estimado)"] or L["Vendas/dia (região)"], string.format(L["%.2f  (%.1f%% do total)"], r.spd, (r.spdShare or 0) * 100),
 			1, 0.82, 0, 1, 1, 1)
 	end
+	-- curva ABC = melhor uso da concentração (ordem e corte pelo ouro por ponto)
+	if r.abcFree then
+		GameTooltip:AddLine(L["Classe A: lucra sem gastar concentração"], 0.4, 0.8, 1, true)
+	elseif r.abc and r.abcShare then
+		GameTooltip:AddDoubleLine(string.format(L["Classe %s · curva do ouro/ponto"], r.abc),
+			string.format(L["%.1f%% da profissão"], r.abcShare * 100), 1, 0.82, 0, 1, 1, 1)
+		GameTooltip:AddLine(L["A curva ABC classifica pelo melhor uso da concentração (ouro por ponto)"], 0.6, 0.6, 0.6, true)
+	elseif not r.unknown and not r.gathered and not r.notAuctionable then
+		GameTooltip:AddLine(L["Sem lucro ou sem giro: fora da curva ABC"], 0.6, 0.6, 0.6, true)
+	end
 	if type(r.mySpd) == "number" then
 		local it = ns.Sales and ns.Sales.Get(r.itemID)
 		GameTooltip:AddDoubleLine(string.format(L["Suas vendas (%d dias)"], tonumber(Cfg("salesDays")) or 14),

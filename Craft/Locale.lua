@@ -1310,5 +1310,11 @@ local T = {
 	["Qualidade das sugestões"] = "Suggestion quality",
 	["Clique: escolher, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."] = "Click: choose, for consumables that have it (e.g. health potion, mana potion, food, weapon oil).",
 	["Item vinculado (não vai para a casa de leilões): fora do % de vendas e da curva ABC"] = "Bound item (can't go to the auction house): excluded from the sales % and the ABC curve",
+	["sem lucro"] = "no profit",
+	["Classe A: lucra sem gastar concentração"] = "Class A: profits without spending concentration",
+	["Classe %s · curva do ouro/ponto"] = "Class %s · gold/point curve",
+	["%.1f%% da profissão"] = "%.1f%% of the profession",
+	["A curva ABC classifica pelo melhor uso da concentração (ouro por ponto)"] = "The ABC curve ranks by the best use of concentration (gold per point)",
+	["Sem lucro ou sem giro: fora da curva ABC"] = "No profit or no turnover: outside the ABC curve",
 }
 for k, v in pairs(T) do L[k] = v end
