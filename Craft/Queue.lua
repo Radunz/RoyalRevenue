@@ -738,20 +738,35 @@ function Queue.ConcPointValue(char, profID)
 end
 
 -- ===== Tabela dos pedidos de fabricação (colunas com título, ordenável) =====
--- Larguras fixas da direita para a esquerda; a coluna Item fica com o que sobrar.
-local OCOL = { claim = 104, time = 58, reag = 160, profit = 86, reward = 140, cost = 84 }
-local OGAP = 6
+-- Ordem: Item · Custo · Reagentes · Recompensa · Lucro · Tempo · Pegar pedido.
+-- A coluna Item tem um mínimo garantido: se o painel for estreito, as OUTRAS encolhem
+-- (proporcionalmente, até um mínimo próprio) em vez de passar por cima do nome.
+local OCOL  = { cost = 76, reag = 132, reward = 118, profit = 84, time = 50, claim = 104 }
+local OCMIN = { cost = 54, reag = 70,  reward = 54,  profit = 62, time = 34, claim = 72 }
+local OORDER = { "cost", "reag", "reward", "profit", "time", "claim" }
+local OGAP, ITEM_MIN = 8, 170
 function Queue.OrderCols(QW)
-	local c = {}
-	c.claim = QW - 8 - OCOL.claim
-	c.time = c.claim - OGAP - OCOL.time
-	c.reag = c.time - OGAP - OCOL.reag
-	c.profit = c.reag - OGAP - OCOL.profit
-	c.reward = c.profit - OGAP - OCOL.reward
-	c.cost = c.reward - OGAP - OCOL.cost
+	local w = {}
+	for _, k in ipairs(OORDER) do w[k] = OCOL[k] end
+	local fixed = 16 + OGAP * #OORDER
+	local total, mins = 0, 0
+	for _, k in ipairs(OORDER) do total = total + w[k]; mins = mins + OCMIN[k] end
+	local avail = QW - fixed - ITEM_MIN
+	if total > avail then
+		local room, flex = math.max(0, avail - mins), total - mins
+		for _, k in ipairs(OORDER) do
+			w[k] = OCMIN[k] + ((flex > 0) and math.floor((w[k] - OCMIN[k]) * room / flex) or 0)
+		end
+	end
+	local c = { w = w }
+	c.claim = QW - 8 - w.claim
+	c.time = c.claim - OGAP - w.time
+	c.profit = c.time - OGAP - w.profit
+	c.reward = c.profit - OGAP - w.reward
+	c.reag = c.reward - OGAP - w.reag
+	c.cost = c.reag - OGAP - w.cost
 	c.item = 8
-	c.itemW = math.max(120, c.cost - OGAP - c.item)
-	c.w = OCOL
+	c.itemW = math.max(60, c.cost - OGAP - c.item)   -- nunca invade a coluna Custo
 	return c
 end
 -- comissão líquida + recompensas (o que o pedido paga)
@@ -1167,9 +1182,9 @@ function Queue.Render(cv)
 		end
 		OHead(OC.item, OC.itemW, "item", "Item")
 		OHead(OC.cost, OC.w.cost, "cost", "Custo", "RIGHT")
+		qc:Text(OC.reag, ly + 2, "|cffd4af37" .. L["Reagentes"] .. "|r", GameFontNormalSmall, OC.w.reag)
 		OHead(OC.reward, OC.w.reward, "reward", "Recompensa")
 		OHead(OC.profit, OC.w.profit, "profit", "Lucro", "RIGHT")
-		qc:Text(OC.reag, ly + 2, "|cffd4af37" .. L["Reagentes"] .. "|r", GameFontNormalSmall, OC.w.reag)
 		OHead(OC.time, OC.w.time, "time", "Tempo", "RIGHT")
 		ly = ly + 18
 		Queue.SortOrders(Queue.orders)
@@ -1272,7 +1287,7 @@ function Queue.Render(cv)
 						tt:SetText(L["Conhecimento da profissão"])
 						tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], x.kp), 0.3, 1, 0.3, true)
 					end })
-				rx = rx + 23
+				rx = rx + 25
 			end
 			for _, rw in ipairs(x.rewList or {}) do
 				if rx > rmax then break end
@@ -1286,7 +1301,7 @@ function Queue.Render(cv)
 						if rw.kp then tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], rw.kp * rw.n), 0.3, 1, 0.3) end
 						tt:AddDoubleLine(L["Valor na AH"], rw.v and P.FormatMoney(rw.v * rw.n) or L["vinculado / sem preço"], 1, 0.82, 0, 1, 1, 1)
 					end })
-				rx = rx + 23
+				rx = rx + 25
 			end
 
 			-- Lucro: recompensa − custo
@@ -1311,10 +1326,12 @@ function Queue.Render(cv)
 							tt:AddDoubleLine(L["Tem"], root.Num(have, 0), 1, 0.82, 0, falta and 1 or 0.3, falta and 0.3 or 1, 0.3)
 							if p.unit then tt:AddDoubleLine(L["Custo"], P.FormatMoney(p.unit * need), 1, 0.82, 0, 1, 1, 1) end
 						end })
-					gx = gx + 23
+					gx = gx + 26
 				end
 			end
-			if x.concPts and gx <= gmax then
+			-- concentração entra como reagente só quando é OBRIGATÓRIA para a qualidade mínima;
+			-- a opcional (o pedido aceita a qualidade de baixo) fica só no tooltip do item
+			if x.concPts and not x.concOpt and gx <= gmax then
 				-- profissão escaneada sem dados de concentração não tem e.conc
 				local est
 				if x.e and x.e.conc and ns.Plan and ns.Plan.EstimatedConc then
@@ -1332,7 +1349,7 @@ function Queue.Render(cv)
 							tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
 						end
 					end })
-				gx = gx + 23
+				gx = gx + 26
 			end
 
 			-- Tempo restante

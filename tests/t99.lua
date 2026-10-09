@@ -8,18 +8,23 @@ UnitName = function() return "Uriuri" end; UnitFullName = function() return "Uri
 for _, n in ipairs({ "Craft", "Livro" }) do local x = RR[n]; if x and x._ResetCharKey then x._ResetCharKey() end end
 C_CurrencyInfo = { GetCurrencyInfo = function(id) return { name = "Moxie", iconFileID = 5931173 } end }
 
-print("=== colunas (QW = 1000) ===")
-local OC = Q.OrderCols(1000)
-local ordem = { "item", "cost", "reward", "profit", "reag", "time", "claim" }
-local last = 0
-local cresce = true
-for _, k in ipairs(ordem) do
-	local w = (k == "item") and OC.itemW or OC.w[k]
-	print(string.format("  %-7s x=%4d w=%3d", k, OC[k], w))
-	if OC[k] < last then cresce = false end
-	last = OC[k]
+print("=== colunas: Item · Custo · Reagentes · Recompensa · Lucro · Tempo · Claim ===")
+local ordem = { "item", "cost", "reag", "reward", "profit", "time", "claim" }
+for _, QW in ipairs({ 1200, 750, 520 }) do
+	local OC = Q.OrderCols(QW)
+	local pos = {}
+	local cresce, last = true, -1
+	for _, k in ipairs(ordem) do
+		table.insert(pos, string.format("%s=%d", k, OC[k]))
+		if OC[k] < last then cresce = false end
+		last = OC[k]
+	end
+	-- o nome nunca pode entrar na coluna Custo
+	local semInvadir = (OC.item + OC.itemW) <= OC.cost
+	print(string.format("  QW=%4d itemW=%3d  %s", QW, OC.itemW, table.concat(pos, " ")))
+	print("     " .. ((cresce and semInvadir) and "OK: na ordem e o nome não invade Custo"
+		or (not cresce and "FALHA: coluna fora de ordem" or "FALHA: nome invade Custo")))
 end
-print(cresce and "OK: colunas em ordem, sem sobreposição" or "FALHA: coluna fora de ordem")
 
 print("")
 print("=== tempo restante ===")
@@ -34,8 +39,8 @@ local base = {
 	{ row = { name = "Charlie" }, mat = 50, tip = 400, cut = 0, rew = 0, profit = 350, exp = 100 },
 }
 for _, key in ipairs({ "profit", "cost", "reward", "item", "time" }) do
-	LucroCraftDB.config.orderSort = nil
-	Q.SetOrderSort(key)
+	-- estado de "primeiro clique" na coluna (sem depender da ordem anterior)
+	LucroCraftDB.config.orderSort = { key = key, desc = (key ~= "item" and key ~= "time") }
 	local cp = {}
 	for i, o in ipairs(base) do cp[i] = o end
 	Q.SortOrders(cp)
@@ -73,6 +78,24 @@ local function strip(s) return (tostring(s):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub(
 local heads = {}
 for i = 1, (qc.used and qc.used.head or 0) do table.insert(heads, strip(qc.pools.head[i].text._text or "")) end
 print("  títulos: " .. table.concat(heads, " | "))
+
+print("")
+print("=== concentração como reagente: só a OBRIGATÓRIA ===")
+-- obrigatória (o pedido exige qualidade acima da que sai sem concentração)
+Q.OrderPlan = function() return true, 162, 1, 2, true end
+local obrig = { row = { concCost = 179, quality = 1, maxQuality = 2 } }
+Q.OrderConc(obrig, { minQ = 2, char = "Uriuri-Goldrinn" })
+-- opcional (minQuality 1: a qualidade de baixo já serve)
+Q.OrderPlan = function() return false, nil, 1, nil, true end
+local opc = { row = { concCost = 179, quality = 1, maxQuality = 2 } }
+Q.OrderConc(opc, { minQ = 1, char = "Uriuri-Goldrinn" })
+print(string.format("  obrigatória: concPts=%s concOpt=%s -> entra na coluna Reagentes: %s",
+	tostring(obrig.concPts), tostring(obrig.concOpt), tostring(obrig.concPts and not obrig.concOpt)))
+print(string.format("  opcional:    concPts=%s concOpt=%s -> entra na coluna Reagentes: %s",
+	tostring(opc.concPts), tostring(opc.concOpt), tostring(opc.concPts and not opc.concOpt or false)))
+print((obrig.concPts and not obrig.concOpt and opc.concOpt)
+	and "OK: só a obrigatória vira reagente; a opcional fica no tooltip"
+	or "FALHA: a coluna Reagentes mostra concentração opcional")
 
 print("")
 print("=== só um pedido pode ser pego por vez ===")

@@ -2,7 +2,7 @@
 ## Title: |cffd4af37Royal|r |cff6f9be0Revenue|r
 ## Notes: Lucro de craft (receitas, concentração, compras, vendas, fila, investimento) + livro-caixa de cada atividade. Cores da Pomerânia, da família Radünz.
 ## Author: Rafael Radünz
-## Version: 1.31.0
+## Version: 1.31.1
 ## SavedVariables: LucroCraftDB, LucroLivroDB, RoyalRevenueDB
 ## LoadSavedVariablesFirst: 1
 ## OptionalDeps: TradeSkillMaster, Auctionator, CraftSim

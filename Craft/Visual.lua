@@ -227,7 +227,14 @@ function Canvas:Icon(x, y, size, texture, o)
 	else
 		b.shade:Hide()
 	end
-	b.count:SetText(o.count or "")
+	-- quantidade DENTRO do ícone: número grande vira "1,2k" e a fonte encolhe conforme o ícone,
+	-- senão o texto passa por cima do ícone vizinho
+	local ctext = o.count and tostring(o.count) or ""
+	local cnum = tonumber((ctext:gsub("[%.,]", "")))
+	if cnum and cnum >= 10000 then ctext = string.format("%dk", math.floor(cnum / 1000))
+	elseif cnum and cnum >= 1000 then ctext = string.format("%.1fk", cnum / 1000):gsub("%.0k", "k") end
+	b.count:SetFontObject((size <= 26 or #ctext >= 4) and NumberFontNormalSmall or NumberFontNormal)
+	b.count:SetText(ctext)
 	-- quantidade em vermelho quando falta (reagente/concentração insuficiente)
 	local cc = o.countColor
 	b.count:SetTextColor(cc and cc[1] or 1, cc and cc[2] or 1, cc and cc[3] or 1)
