@@ -31,3 +31,33 @@ Contabilidade completa por personagem: Painel, DRE, Fluxo de caixa, Centros de r
 ---
 
 *(ajustar "Royal Revenue" → nome final se mudar, e confirmar os números de Interface antes de publicar)*
+
+## English version
+
+### Summary (short field, ~150-200 characters)
+
+Calculates the most profitable craft for your profession on the auction house and keeps a full gold/item ledger for every character.
+
+### Full description (page body)
+
+**Royal Revenue** is a crafting profit and bookkeeping addon for World of Warcraft (Midnight). It answers two questions: *"what's the most profitable thing to craft and sell right now?"* and *"where did my gold actually go (or come from)?"*.
+
+#### Craft — crafting profit
+- **Recipes**: profit per craft and per concentration point for every recipe in the open profession, with an ABC curve.
+- **Concentration Plan**: greedy gold/point allocation, with a "HOLD" warning when it's worth waiting for concentration to refill for the most profitable recipe.
+- **Investment**: return from gear, specialization, buffs and gathering per hour; second-profession suggestions per character.
+- **Salvage**: salvaging, Disenchanting, Milling/Prospecting and transmutes (with charge tracking).
+- **Craft Queue**: crafting queue and crafting orders, including concentration and customer-supplied reagents.
+
+#### Market
+- **Buy**: what you still need to buy for N days of crafting, price history with the cheapest day/time window, buy signal.
+- **Sell**: bag items ready for the AH, price history, direct posting.
+- **Buy Recipes**: recipes your characters haven't learned yet that are for sale on the AH or from a vendor.
+
+#### Ledger
+Full per-character bookkeeping: Dashboard, Income Statement, Cash Flow, Cost Centers, Journal and Sales — all posted automatically from your in-game events (crafting, selling, buying, orders, loot, repairs, etc.).
+
+#### Compatibility
+- **Retail only** (Interface 120100 / Midnight).
+- Works with no external addons required; if installed, it takes advantage of **TradeSkillMaster**, **Auctionator** and **CraftSim** for pricing and crafting data.
+- Interface available in English and Brazilian Portuguese.
