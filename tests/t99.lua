@@ -81,6 +81,7 @@ print("  títulos: " .. table.concat(heads, " | "))
 
 print("")
 print("=== concentração como reagente: só a OBRIGATÓRIA ===")
+local OrderPlanReal = Q.OrderPlan   -- os casos abaixo trocam o OrderPlan; restaurado depois
 -- obrigatória (o pedido exige qualidade acima da que sai sem concentração)
 Q.OrderPlan = function() return true, 162, 1, 2, true end
 local obrig = { row = { concCost = 179, quality = 1, maxQuality = 2 } }
@@ -157,3 +158,33 @@ for i, rw in ipairs(rews) do
 end
 print(todosOk and "OK: nenhuma recompensa caiu na interrogação (Moxie vem por currencyType, sem link)"
 	or "FALHA: alguma recompensa ainda cai na interrogação")
+
+print("")
+print("=== API sem resposta não pode virar 'não precisa de concentração' ===")
+Q.OrderPlan = OrderPlanReal   -- volta o original (as seções acima usaram stub)
+-- dois pedidos quase iguais apareciam um com e outro sem o custo: quando o jogo não calculava a
+-- qualidade do pedido, o addon afirmava que não precisava, em vez de usar o que o scan sabe
+local CH, PROF, RID = "Radunz-Goldrinn", 2913, 1230018
+local rr
+for _, z in ipairs(LucroCraftDB.chars[CH][PROF].rows) do if z.recipeID == RID then rr = z end end
+local function Caso(nome, opInfo, minQ)
+	C_TradeSkillUI.GetCraftingOperationInfoForOrder = function() return opInfo end
+	C_TradeSkillUI.GetCraftingOperationInfo = function() return opInfo end
+	local x = { row = rr }
+	Q.OrderConc(x, { recipeID = RID, char = CH, prof = PROF, minQ = minQ, custR = {}, given = {}, row = rr })
+	print(string.format("  %-36s concPts=%-5s estimado=%-5s opcional=%-5s", nome,
+		tostring(x.concPts), tostring(x.concEst), tostring(x.concOpt)))
+	return x
+end
+print(string.format("  (receita %s, concCost %s, qualidade %s de %s)", rr.name, tostring(rr.concCost),
+	tostring(rr.quality), tostring(rr.maxQuality)))
+local c1 = Caso("API responde q0=1, minQ=2", { craftingQuality = 1, concentrationCost = 330 }, 2)
+local c2 = Caso("API responde q0=2, minQ=2 (já basta)", { craftingQuality = 2 }, 2)
+local c3 = Caso("API NÃO responde, minQ=2", nil, 2)
+local c4 = Caso("API NÃO responde, minQ=1", nil, 1)
+local ok = c1.concPts and not c1.concOpt            -- obrigatória
+	and c2.concOpt                                   -- já alcança: vira opcional
+	and c3.concPts and not c3.concOpt and c3.concEst -- sem API: obrigatória, marcada como estimada
+	and c4.concOpt                                   -- minQ 1: opcional
+print(ok and "OK: sem resposta da API, a concentração obrigatória aparece (estimada) em vez de sumir"
+	or "FALHA: pedido obrigatório ainda pode ficar sem o custo de concentração")

@@ -1329,6 +1329,7 @@ local T = {
 	["Conhecimento da profissão"] = "Profession knowledge",
 	["Primeira fabricação"] = "First craft",
 	["Quantidade"] = "Quantity",
+	["Estimado pelo scan da profissão: o jogo não calculou a qualidade deste pedido (abra o pedido para o número exato)."] = "Estimated from the profession scan: the game did not compute this order's quality (open the order for the exact number).",
 	["Você ainda não fabricou esta receita: a primeira dá conhecimento extra."] = "You haven't crafted this recipe yet: the first one gives extra knowledge.",
 	["Você já tem um pedido pego. Entregue ou largue ele antes de pegar outro."] = "You already have a claimed order. Deliver or release it before claiming another.",
 	["Aba Concentração: classifica pelo melhor uso da concentração (ouro por ponto)"] = "Concentration tab: ranked by the best use of concentration (gold per point)",

@@ -684,3 +684,11 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - Visual.lua: `V.CurrencyIcon(id)` e `V.CurrencyName(id)` com cache, num lugar só — Queue.lua usa os dois em vez de repetir `C_CurrencyInfo.GetCurrencyInfo` em três pontos.
 - Tooltip da recompensa: moeda mostra o tooltip da própria moeda (`SetCurrencyByID`) e a quantidade, **sem** a linha "Valor na AH" (que só faz sentido para item).
 - Teste: t99.lua ganhou os 3 formatos reais de recompensa (item com nome, moeda por `currencyType` sem link, item com nome vazio ainda não carregado) — nenhum cai na interrogação.
+
+## v1.31.4 — dois pedidos iguais, um sem o custo de concentração (print do Rafael, Madunz)
+- Print: dois "Potion of Recklessness" quase idênticos, um mostrando concentração 177 na coluna Reagentes e o outro sem nada. Conferido no SavedVariables: **os dois têm `minQuality = 2`**, ou seja, os dois precisam de concentração — não era o filtro de "opcional" da v1.31.1.
+- Causa: `Queue.OrderPlan` juntava três situações diferentes numa linha só — `if minQ <= 1 or not q0 or q0 >= minQ then return false ...`. O `not q0` é "**a API não respondeu a qualidade deste pedido**" (acontece quando o pedido não está aberto/selecionado na janela do jogo), e o addon tratava isso como "não precisa de concentração". Resposta errada e silenciosa, e que muda de pedido para pedido conforme o que o jogo tem carregado — daí dois pedidos iguais saírem diferentes.
+- Agora os três casos são separados: `minQ <= 1` → opcional; `q0 >= minQ` → realmente não precisa; **`q0` nil** → cai no que o scan da profissão sabe (se a qualidade normal da receita não alcança a mínima e existe `concCost`, a concentração é obrigatória), marcando `x.concEst`. O número aparece com "(~)" no tooltip e a explicação de que é estimativa.
+- `OrderConc` passa a receita (`c.row`) para o `OrderPlan` usar nessa reserva.
+- Snapshot de diagnóstico (`LucroCraftDB.ordersDebug`): copiava só 3 níveis e truncava o resto em `"{...}"` — o itemID do reagente do cliente fica em `reagents[i].reagentInfo.reagents[j].itemID` e ficava escondido, o que atrapalhou este diagnóstico. Agora copia até 5 níveis.
+- Teste: t99.lua — os 4 casos (API responde e falta qualidade → obrigatória; API responde e já alcança → opcional; **API não responde e minQ 2 → obrigatória, estimada**; API não responde e minQ 1 → opcional).

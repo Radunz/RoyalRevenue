@@ -535,27 +535,22 @@ function Queue.ReadOrders()
 	if not ok or type(list) ~= "table" or #list == 0 then
 		return 0, L["abra a profissão > Pedidos de fabricação e escolha a aba (Público, Patrono, Pessoal) para o jogo carregar a lista."]
 	end
-	-- cópia simples dos pedidos lidos (para conferir campos do jogo depois)
+	-- cópia dos pedidos lidos (para conferir os campos do jogo depois). Copia até 5 níveis:
+	-- o itemID do reagente do cliente fica fundo (reagents[i].reagentInfo.reagents[j].itemID) e
+	-- a versão antiga parava em "{...}", o que já atrapalhou um diagnóstico.
+	local function Copy(v, depth)
+		if type(v) ~= "table" then return v end
+		if depth <= 0 then return "{...}" end
+		local out = {}
+		for k, v2 in pairs(v) do
+			if type(k) == "string" or type(k) == "number" then out[k] = Copy(v2, depth - 1) end
+		end
+		return out
+	end
 	local snap = {}
 	for i, o in ipairs(list) do
 		if i > 8 then break end
-		local t = {}
-		for k, v in pairs(o) do
-			if type(v) ~= "table" then t[k] = v
-			else
-				local sub = {}
-				for k2, v2 in pairs(v) do
-					if type(v2) == "table" then
-						local s3 = {}
-						for k3, v3 in pairs(v2) do s3[k3] = type(v3) == "table" and "{...}" or v3 end
-						for k3, v3 in pairs(v2) do if type(v3) == "table" then for k4, v4 in pairs(v3) do if type(v4) ~= "table" then s3[k3 .. "." .. k4] = v4 end end end end
-						sub[k2] = s3
-					else sub[k2] = v2 end
-				end
-				t[k] = sub
-			end
-		end
-		snap[i] = t
+		snap[i] = Copy(o, 5)
 	end
 	LucroCraftDB.ordersDebug = snap
 	local claimed = DB().claimed or {}
@@ -707,14 +702,26 @@ end
 -- precisa de concentração para chegar na qualidade mínima do pedido?
 -- devolve: usar concentração (bool), custo de concentração, qualidade sem, qualidade com, alcança (bool)
 function Queue.OrderPlan(c)
-	local tbl, _, mine = OrderReagentsFull(c)
+	local tbl, r, mine = OrderReagentsFull(c)
 	if not tbl then return false end
+	r = c.row or r
 	local minQ = c.minQ or 0
 	-- pedido antigo sem a lista do cliente e com tudo fornecido: não dá para calcular direito → não pede concentração
 	if not c.custR and mine and #mine == 0 then return false, nil, nil, nil, true end
 	local op0 = OrderOp(c, tbl, false)
 	local q0 = op0 and op0.craftingQuality
-	if minQ <= 1 or not q0 or q0 >= minQ then return false, nil, q0, nil, true end
+	if minQ <= 1 then return false, nil, q0, nil, true end
+	-- A API não respondeu a qualidade (acontece com pedido que não está aberto/selecionado).
+	-- Antes isso virava "não precisa de concentração" — resposta errada e silenciosa, que fazia
+	-- dois pedidos iguais aparecerem um com e outro sem o custo. Agora usa o que o scan sabe.
+	if not q0 then
+		if r and r.concCost and r.concCost > 0 and (r.quality or 0) < minQ then
+			local alcanca = (r.concQuality or 0) >= minQ
+			return true, r.concCost, r.quality, r.concQuality, alcanca, true   -- true final = estimado
+		end
+		return false, nil, nil, nil, true
+	end
+	if q0 >= minQ then return false, nil, q0, nil, true end
 	-- a API não devolve a qualidade "com concentração": concentrationCost é o custo para subir 1 nível
 	-- (o mesmo que o Scanner usa). Com concentração sai q0 + 1.
 	local cost = op0 and op0.concentrationCost
@@ -845,10 +852,11 @@ end
 -- continua tendo custo de concentração (é o que o jogo e o CraftSim mostram). x.concOpt marca
 -- que é opcional — nesse caso o lucro não desconta os pontos (você escolhe se gasta).
 local function OrderConc(x, c)
-	local okP, conc, cost, q0, q1, reach = pcall(Queue.OrderPlan, c)
+	c.row = c.row or x.row   -- o OrderPlan usa o scan como reserva quando a API não responde
+	local okP, conc, cost, q0, q1, reach, est = pcall(Queue.OrderPlan, c)
 	if not okP then return end
 	if conc and not reach then x.unreach = true; x.q0 = q0 return end
-	x.q0, x.q1 = q0, q1
+	x.q0, x.q1, x.concEst = q0, q1, est or nil
 	if not conc then
 		-- não é obrigatória: pega o custo da receita escaneada (subir 1 qualidade)
 		local r = x.row
@@ -1367,7 +1375,10 @@ function Queue.Render(cv)
 					{ count = root.Num(x.concPts, 0), countColor = faltaC and { 1, 0.3, 0.3 } or nil,
 					  border = { 0.4, 0.8, 1 }, tip = function(tt)
 						tt:SetText(L["Concentração"])
-						tt:AddDoubleLine(L["Precisa"], root.Num(x.concPts, 0), 1, 0.82, 0, 1, 1, 1)
+						tt:AddDoubleLine(L["Precisa"], root.Num(x.concPts, 0) .. (x.concEst and " (~)" or ""), 1, 0.82, 0, 1, 1, 1)
+						if x.concEst then
+							tt:AddLine(L["Estimado pelo scan da profissão: o jogo não calculou a qualidade deste pedido (abra o pedido para o número exato)."], 1, 0.8, 0.3, true)
+						end
 						if est then tt:AddDoubleLine(L["Tem"], root.Num(math.floor(est), 0), 1, 0.82, 0, faltaC and 1 or 0.3, faltaC and 0.3 or 1, 0.3) end
 						if x.concOpt then
 							tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
