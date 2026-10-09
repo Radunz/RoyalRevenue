@@ -1,5 +1,5 @@
 -- Harness: carrega o Royal Revenue com API do WoW simulada e os SavedVariables reais
-ADDON_DIR = ADDON_DIR or "../RoyalRevenue/"
+ADDON_DIR = ADDON_DIR or "../"
 NOW = NOW or os.time()
 local realtime = os.time
 time = function(t) if t then return realtime(t) end return NOW end

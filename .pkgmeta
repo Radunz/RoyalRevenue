@@ -1,0 +1,7 @@
+ignore:
+  - docs
+  - tests
+  - tools
+  - CLAUDE.md
+  - LICENSE
+  - README.md

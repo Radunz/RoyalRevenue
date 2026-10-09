@@ -24,18 +24,25 @@ Versão atual: **1.25.1** (ver `RoyalRevenue/RoyalRevenue.toc`). Histórico comp
 - Usa TSM, Auctionator (opcional) e CraftSim (opcional). O addon precisa funcionar sem nenhum deles; em último caso usa o scan próprio da AH.
 
 ## Estrutura
+A raiz do repositório É a pasta do addon (precisa ser assim pro BigWigs Packager, que
+publica no CurseForge — ele espera o `.toc` junto do `.git`). `.pkgmeta` na raiz ignora
+`docs/`, `tests/`, `tools/` etc. na hora de empacotar.
 ```
-RoyalRevenue/          o addon (é o que vai para AddOns)
-  RoyalRevenue.toc     ordem de carga — arquivo novo precisa entrar aqui
-  Brand.lua            1º: paleta, root.Num, root.Out (log), caches compartilhados
-  Craft/*.lua          módulo de lucro de craft (ns = root.Craft)
-  Livro/*.lua          módulo livro-caixa (ns = root.Livro)
-  Shell.lua            último: janela, barra Craft | Mercado | Livro-caixa, comandos /rr, escala
-  Media/icon.tga
+RoyalRevenue.toc       ordem de carga — arquivo novo precisa entrar aqui
+Brand.lua              1º: paleta, root.Num, root.Out (log), caches compartilhados
+Craft/*.lua            módulo de lucro de craft (ns = root.Craft)
+Livro/*.lua            módulo livro-caixa (ns = root.Livro)
+Shell.lua              último: janela, barra Craft | Mercado | Livro-caixa, comandos /rr, escala
+Media/icon.tga
+.pkgmeta               ignore list pro empacotamento (CurseForge/BigWigs Packager)
 docs/CHANGELOG.md      decisões e mudanças versão a versão (v1.1 → atual)
+docs/CURSEFORGE.md     texto da página do CurseForge (PT e EN)
 tests/                 harness com API do WoW simulada + testes de regressão
-tools/                 check.sh (sintaxe), build.sh (zip), reclass_gen.lua (gerador do Livro/Reclass.lua)
+tools/                 check.sh (sintaxe), build.sh (zip local), reclass_gen.lua (gerador do Livro/Reclass.lua)
+.github/workflows/     release.yml: tag vX.Y.Z → empacota, publica no CurseForge e cria release no GitHub
 ```
+Pra instalar no jogo, copia-se só `RoyalRevenue.toc`, `Brand.lua`, `Shell.lua`, `Craft/`,
+`Livro/` e `Media/` para `Interface\AddOns\RoyalRevenue\` — não a raiz do repo inteira.
 
 Todo arquivo começa com:
 ```lua
