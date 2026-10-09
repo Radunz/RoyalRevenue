@@ -1118,6 +1118,22 @@ local function Create()
 			-- a rodinha na linha rola a seção
 			row:EnableMouseWheel(true)
 			row:SetScript("OnMouseWheel", function(_, delta) sec:GetScript("OnMouseWheel")(sec, delta) end)
+			-- linha criada depois do UI.Layout (seção que cresceu): posiciona as colunas agora,
+			-- senão as FontStrings ficam sem âncora e a linha sai só com ícone e zebra
+			local g = frame.colGeom
+			if g then
+				for _, c in ipairs(g.cols) do
+					local fs = row.cols[c.key]
+					if fs then
+						if c.hidden then fs:Hide()
+						else
+							fs:SetWidth(c.w); fs:ClearAllPoints()
+							fs:SetPoint("LEFT", row, "LEFT", c.x - 12, 0); fs:Show()
+						end
+					end
+				end
+				row:SetWidth(g.width - 24)
+			end
 			table.insert(sec.rows, row)
 			table.insert(frame.rows, row)
 		end
@@ -1509,6 +1525,9 @@ function UI.Layout()
 	local extra = math.max(0, width - required)
 	local shown = {}
 	local x = LEFT_PAD
+	-- guarda a geometria das colunas: linha criada depois (UI.LayoutRows) se posiciona sozinha.
+	-- Sem isso a FontString fica sem âncora e a linha aparece só com ícone e zebra, sem texto.
+	local geom = { width = width, cols = {} }
 	for _, col in ipairs(visible) do
 		shown[col.key] = true
 		local cw = col.width + (col.key == "name" and extra or 0)
@@ -1518,6 +1537,7 @@ function UI.Layout()
 		h:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -112)
 		h:SetShown((frame.currentTab or 1) == 1)
 		h.x = x
+		table.insert(geom.cols, { key = col.key, w = cw, x = x })
 		for _, row in ipairs(frame.rows) do
 			local fs = row.cols[col.key]
 			fs:SetWidth(cw)
@@ -1531,8 +1551,10 @@ function UI.Layout()
 		if not shown[col.key] then
 			frame.headerByKey[col.key]:Hide()
 			for _, row in ipairs(frame.rows) do row.cols[col.key]:Hide() end
+			table.insert(geom.cols, { key = col.key, hidden = true })
 		end
 	end
+	frame.colGeom = geom
 	frame.list:SetWidth(width - 24)
 	for _, row in ipairs(frame.rows) do row:SetWidth(width - 24) end
 	-- se ordenava por uma coluna que sumiu, volta para Lucro (ou Receita)
