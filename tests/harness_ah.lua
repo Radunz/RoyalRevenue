@@ -49,6 +49,9 @@ function Widget:UnregisterEvent() end
 function Widget:SetScript(k, fn) self._scripts[k] = fn end
 function Widget:GetScript(k) return self._scripts[k] end
 function Widget:HookScript(k, fn) self._scripts[k] = fn end
+function Widget:Enable() rawset(self, "_enabled", true) end
+function Widget:Disable() rawset(self, "_enabled", false) end
+function Widget:IsEnabled() return rawget(self, "_enabled") ~= false end
 function Widget:Show() self._shown = true end
 function Widget:Hide() self._shown = false end
 function Widget:SetShown(v) self._shown = v and true or false end

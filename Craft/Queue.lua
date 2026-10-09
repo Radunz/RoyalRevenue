@@ -737,6 +737,76 @@ function Queue.ConcPointValue(char, profID)
 	return best or 0, name
 end
 
+-- ===== Tabela dos pedidos de fabricação (colunas com título, ordenável) =====
+-- Larguras fixas da direita para a esquerda; a coluna Item fica com o que sobrar.
+local OCOL = { claim = 104, time = 58, reag = 160, profit = 86, reward = 140, cost = 84 }
+local OGAP = 6
+function Queue.OrderCols(QW)
+	local c = {}
+	c.claim = QW - 8 - OCOL.claim
+	c.time = c.claim - OGAP - OCOL.time
+	c.reag = c.time - OGAP - OCOL.reag
+	c.profit = c.reag - OGAP - OCOL.profit
+	c.reward = c.profit - OGAP - OCOL.reward
+	c.cost = c.reward - OGAP - OCOL.cost
+	c.item = 8
+	c.itemW = math.max(120, c.cost - OGAP - c.item)
+	c.w = OCOL
+	return c
+end
+-- comissão líquida + recompensas (o que o pedido paga)
+local function OrderReward(x) return (x.tip or 0) - (x.cut or 0) + (x.rew or 0) end
+local OSORT = {
+	item = function(x) return (x.row and x.row.name) or "" end,
+	cost = function(x) return x.mat or 0 end,
+	reward = OrderReward,
+	profit = function(x) return x.profit or 0 end,
+	time = function(x) return x.exp or (x.order and x.order.expirationTime) or math.huge end,
+}
+function Queue.OrderSort()
+	local s = LucroCraftDB.config and LucroCraftDB.config.orderSort
+	if type(s) ~= "table" or not OSORT[s.key] then return { key = "profit", desc = true } end
+	return s
+end
+function Queue.SetOrderSort(key)
+	if not OSORT[key] then return end
+	local cur = Queue.OrderSort()
+	local desc
+	if cur.key == key then
+		desc = not cur.desc            -- mesma coluna de novo: inverte
+	else
+		desc = (key ~= "item" and key ~= "time")   -- nome e tempo começam crescentes
+	end
+	LucroCraftDB.config.orderSort = { key = key, desc = desc }
+	Queue.Refresh()
+end
+function Queue.SortOrders(list)
+	local s = Queue.OrderSort()
+	local get = OSORT[s.key]
+	table.sort(list, function(a, b)
+		local va, vb = get(a), get(b)
+		if va ~= vb then
+			-- nada de "s.desc and va > vb or va < vb": com desc e va <= vb isso cai no segundo ramo
+			if s.desc then return va > vb end
+			return va < vb
+		end
+		return ((a.row and a.row.name) or "") < ((b.row and b.row.name) or "")
+	end)
+end
+-- tempo restante até o pedido expirar
+function Queue.OrderTimeLeft(x)
+	local exp = x.exp or (x.order and x.order.expirationTime)
+	if not exp or exp <= 0 then return nil end
+	return exp - time()
+end
+function Queue.ShortTime(s)
+	if not s then return "—" end
+	if s <= 0 then return L["expirado"] end
+	if s < 3600 then return string.format(L["%dmin"], math.floor(s / 60)) end
+	if s < 86400 then return string.format(L["%dh"], math.floor(s / 3600)) end
+	return string.format(L["%dd"], math.floor(s / 86400))
+end
+
 -- concentração do pedido (preenche x.concPts, x.concValue, x.concOpt, x.unreach)
 -- Mostra o custo SEMPRE que a receita puder usar concentração, não só quando ela é obrigatória
 -- para a qualidade mínima: com minQuality 1 o pedido aceita a qualidade de baixo, mas a receita
@@ -1083,6 +1153,26 @@ function Queue.Render(cv)
 		qc:Button(QW - 64, top + 1, 60, 18, L["Limpar"], function() Queue.ClearOrders() end, function(tt) tt:SetText(L["Limpar a lista de pedidos lidos"]) end)
 		local unknown, k = 0, 0
 		for _, x in ipairs(Queue.orders) do if not x.row then unknown = unknown + 1 end end
+		-- o jogo só deixa UM pedido reivindicado por vez: com um pego, os outros ficam desabilitados
+		local claimedMine = 0
+		for _, c in pairs(DB().claimed or {}) do if c.char == me then claimedMine = claimedMine + 1 end end
+		local OC = Queue.OrderCols(QW)
+		local srt = Queue.OrderSort()
+		-- cabeçalho: clique ordena pela coluna
+		local function OHead(x0, w, key, label, just)
+			local arrow = (srt.key == key) and (srt.desc and " v" or " ^") or ""
+			qc:Header(x0, ly, w, 16, "|cffd4af37" .. L[label] .. arrow .. "|r", just or "LEFT",
+				{ onClick = function() Queue.SetOrderSort(key) end,
+				  tip = function(tt) tt:SetText(L[label]); tt:AddLine(L["Clique: ordenar por esta coluna"], 1, 1, 1) end })
+		end
+		OHead(OC.item, OC.itemW, "item", "Item")
+		OHead(OC.cost, OC.w.cost, "cost", "Custo", "RIGHT")
+		OHead(OC.reward, OC.w.reward, "reward", "Recompensa")
+		OHead(OC.profit, OC.w.profit, "profit", "Lucro", "RIGHT")
+		qc:Text(OC.reag, ly + 2, "|cffd4af37" .. L["Reagentes"] .. "|r", GameFontNormalSmall, OC.w.reag)
+		OHead(OC.time, OC.w.time, "time", "Tempo", "RIGHT")
+		ly = ly + 18
+		Queue.SortOrders(Queue.orders)
 		for _, x in ipairs(Queue.orders) do
 			if x.row then k = k + 1 end
 			if k > 15 then break end
@@ -1090,7 +1180,7 @@ function Queue.Render(cv)
 			local r = x.row
 			root.Zebra(qc, k, 0, ly - 2, QW, 34)
 			local id = (r and r.itemID) or x.order.itemID
-			qc:Icon(8, ly + 2, 28, V.ItemIcon(id, r and r.icon), { link = x.order.outputItemHyperlink, tip = function(tt)
+			qc:Icon(OC.item, ly + 2, 28, V.ItemIcon(id, r and r.icon), { link = x.order.outputItemHyperlink, tip = function(tt)
 				if x.order.outputItemHyperlink then tt:SetHyperlink(x.order.outputItemHyperlink) elseif id then tt:SetItemByID(id) end
 				tt:AddLine(" ")
 				tt:AddDoubleLine(L["Tipo"], x.type .. (x.customer and (" · " .. x.customer) or ""), 1, 0.82, 0, 1, 1, 1)
@@ -1130,14 +1220,43 @@ function Queue.Render(cv)
 					if all then tt:AddLine(L["O cliente mandou todos os materiais."], 0.3, 1, 0.3) end
 				end
 			end })
-			qc:Text(44, ly + 3, (r and "|cffffffff" or "|cff808080") .. (r and r.name or (C_Item.GetItemNameByID(id or 0) or "?")) .. "|r", GameFontHighlight, QW - 300)
-			qc:Text(44, ly + 19, "|cff9d9d9d" .. x.type .. (x.customer and (" · " .. x.customer) or "") .. (r and "" or (" · " .. L["receita que você não sabe"])) .. "|r"
-				.. ((x.kp or 0) > 0 and ("  |cff55ff55" .. string.format(L["+%d conhecimento"], x.kp) .. "|r") or "")
-				.. (x.concPts and ("  |cff66ccff" .. ns.ConcStr(x.concPts, x.e and x.e.professionID)
-					.. (x.concOpt and L[" (opcional)"] or "") .. "|r") or "")
-				.. (x.unreach and L["  |cffff5555qualidade inalcançável|r"] or ""), GameFontDisableSmall, QW - 420)
-			-- recompensas do patrono (ícones; passe o mouse para ver)
-			local rx = QW - 400
+			-- Item: ícone + nome (cor da qualidade) e o patrono como subtexto; nada entre os dois
+			local nameW = OC.itemW - 36
+			local qual = id and C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+			local nameCol = "|cffffffff"
+			if not r then nameCol = "|cff808080"
+			elseif qual and C_Item.GetItemQualityColor then
+				local qr, qg, qb = C_Item.GetItemQualityColor(qual)
+				nameCol = string.format("|cff%02x%02x%02x", qr * 255, qg * 255, qb * 255)
+			end
+			qc:Text(OC.item + 34, ly + 2, nameCol .. (r and r.name or (V.ItemName(id) or "?")) .. "|r", GameFontHighlight, nameW)
+			qc:Text(OC.item + 34, ly + 18, "|cff9d9d9d" .. (x.customer or x.type)
+				.. (r and "" or (" · " .. L["receita que você não sabe"])) .. "|r"
+				.. (x.unreach and L["  |cffff5555qualidade inalcançável|r"] or ""), GameFontDisableSmall, nameW)
+
+			-- Custo: o que SAI do seu bolso (os materiais que você fornece)
+			qc:Text(OC.cost, ly + 9, (x.mat or 0) > 0 and ("|cffff9e40" .. G(x.mat, true) .. "|r") or "|cff9d9d9d—|r",
+				GameFontHighlightSmall, OC.w.cost, "RIGHT")
+			qc:Hit(OC.cost, ly, OC.w.cost, 32, nil, function(tt)
+				tt:SetText(L["Custo"])
+				tt:AddLine(L["Os materiais que VOCÊ fornece, a preço de mercado."], 1, 1, 1, true)
+				for _, pp in ipairs(x.parts or {}) do
+					local p = pp.part
+					tt:AddDoubleLine("   " .. (p.qty or 1) .. "x " .. (V.ItemName(p.buyItem or p.itemID) or "?"),
+						pp.given and L["|cff55ff55cliente|r"] or (p.unit and P.FormatMoney(p.unit * (p.qty or 1)) or "?"), 0.8, 0.8, 0.8, 1, 1, 1)
+				end
+				if x.miss then tt:AddLine(L["(?) algum reagente está sem preço"], 1, 0.6, 0.2, true) end
+			end)
+
+			-- Recompensa: comissão líquida + ícones (Moxie, conhecimento, itens), cada um com a quantidade
+			local rewTotal = OrderReward(x)
+			qc:Text(OC.reward, ly + 1, "|cff55ff55" .. G(rewTotal, true) .. "|r", GameFontHighlightSmall, OC.w.reward)
+			qc:Hit(OC.reward, ly, OC.w.reward, 14, nil, function(tt)
+				tt:SetText(L["Recompensa"])
+				tt:AddDoubleLine(L["Comissão"], P.FormatMoney(x.tip), 1, 0.82, 0, 0.3, 1, 0.3)
+				if (x.cut or 0) > 0 then tt:AddDoubleLine(L["Corte do consórcio"], "-" .. P.FormatMoney(x.cut), 1, 0.82, 0, 0.9, 0.5, 0.5) end
+				if (x.rew or 0) > 0 then tt:AddDoubleLine(L["Itens de recompensa"], P.FormatMoney(x.rew), 1, 0.82, 0, 0.3, 1, 0.3) end
+			end)
 			-- recompensa que carregou depois de ler os pedidos: confere de novo se dá conhecimento
 			for _, rw in ipairs(x.rewList or {}) do
 				if rw.kp == nil and rw.id then
@@ -1145,11 +1264,21 @@ function Queue.Render(cv)
 					if rw.kp then x.kp = (x.kp or 0) + rw.kp * rw.n end
 				end
 			end
-			for ri, rw in ipairs(x.rewList or {}) do
-				if ri > 4 then break end
-				-- moeda (Moxie) tem o ícone dela, não o de item
-				qc:Icon(rx, ly + 4, 24, rw.icon or V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
-					border = rw.kp and { 0.3, 1, 0.3 } or nil, link = rw.link, tip = function(tt)
+			local rx, rmax = OC.reward, OC.reward + OC.w.reward - 22
+			-- conhecimento primeiro, como ícone próprio (saiu do subtexto)
+			if (x.kp or 0) > 0 then
+				qc:Icon(rx, ly + 14, 20, nil, { atlas = "Professions_Icon_FirstTimeCraft", count = tostring(x.kp),
+					border = { 0.3, 1, 0.3 }, tip = function(tt)
+						tt:SetText(L["Conhecimento da profissão"])
+						tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], x.kp), 0.3, 1, 0.3, true)
+					end })
+				rx = rx + 23
+			end
+			for _, rw in ipairs(x.rewList or {}) do
+				if rx > rmax then break end
+				-- moeda (Moxie) tem o ícone dela; item fora do cache resolve pelo GetItemIconByID
+				qc:Icon(rx, ly + 14, 20, rw.icon or V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
+					link = rw.link, tip = function(tt)
 						if rw.currency and tt.SetCurrencyByID then tt:SetCurrencyByID(rw.currency)
 						elseif rw.id then tt:SetItemByID(rw.id)
 						elseif rw.link then tt:SetHyperlink(rw.link) end
@@ -1157,14 +1286,71 @@ function Queue.Render(cv)
 						if rw.kp then tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], rw.kp * rw.n), 0.3, 1, 0.3) end
 						tt:AddDoubleLine(L["Valor na AH"], rw.v and P.FormatMoney(rw.v * rw.n) or L["vinculado / sem preço"], 1, 0.82, 0, 1, 1, 1)
 					end })
-				rx = rx + 28
+				rx = rx + 23
 			end
-			qc:Text(QW - 250, ly + 9, G(x.profit, true), GameFontNormal, 100, "RIGHT")
+
+			-- Lucro: recompensa − custo
+			qc:Text(OC.profit, ly + 9, G(x.profit, true), GameFontNormal, OC.w.profit, "RIGHT")
+
+			-- Reagentes que VOCÊ fornece, com a quantidade; a concentração entra como mais um
+			local gx, gmax = OC.reag, OC.reag + OC.w.reag - 22
+			for _, pp in ipairs(x.parts or {}) do
+				if gx > gmax then break end
+				if not pp.given then
+					local p = pp.part
+					local pid = p.buyItem or p.itemID
+					local need = p.qty or 1
+					local have = (ns.Stock and ns.Stock.Usable and ns.Stock.Usable(pid)) or 0
+					local falta = have < need
+					qc:Icon(gx, ly + 5, 22, V.ItemIcon(pid), { count = tostring(need),
+						countColor = falta and { 1, 0.3, 0.3 } or nil,
+						link = pid and select(2, C_Item.GetItemInfo(pid)) or nil, tip = function(tt)
+							if pid then tt:SetItemByID(pid) end
+							tt:AddLine(" ")
+							tt:AddDoubleLine(L["Precisa"], tostring(need), 1, 0.82, 0, 1, 1, 1)
+							tt:AddDoubleLine(L["Tem"], root.Num(have, 0), 1, 0.82, 0, falta and 1 or 0.3, falta and 0.3 or 1, 0.3)
+							if p.unit then tt:AddDoubleLine(L["Custo"], P.FormatMoney(p.unit * need), 1, 0.82, 0, 1, 1, 1) end
+						end })
+					gx = gx + 23
+				end
+			end
+			if x.concPts and gx <= gmax then
+				-- profissão escaneada sem dados de concentração não tem e.conc
+				local est
+				if x.e and x.e.conc and ns.Plan and ns.Plan.EstimatedConc then
+					local okE, v = pcall(ns.Plan.EstimatedConc, x.e)
+					if okE then est = v end
+				end
+				local faltaC = est and est < x.concPts
+				qc:Icon(gx, ly + 5, 22, ns.ConcTexture(x.e and x.e.professionID) or 134400,
+					{ count = root.Num(x.concPts, 0), countColor = faltaC and { 1, 0.3, 0.3 } or nil,
+					  border = { 0.4, 0.8, 1 }, tip = function(tt)
+						tt:SetText(L["Concentração"])
+						tt:AddDoubleLine(L["Precisa"], root.Num(x.concPts, 0), 1, 0.82, 0, 1, 1, 1)
+						if est then tt:AddDoubleLine(L["Tem"], root.Num(math.floor(est), 0), 1, 0.82, 0, faltaC and 1 or 0.3, faltaC and 0.3 or 1, 0.3) end
+						if x.concOpt then
+							tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
+						end
+					end })
+				gx = gx + 23
+			end
+
+			-- Tempo restante
+			local left = Queue.OrderTimeLeft(x)
+			local tcol = (left and left < 3600) and "|cffff5555" or (left and left < 86400) and "|cffffd100" or "|cff9d9d9d"
+			qc:Text(OC.time, ly + 9, tcol .. Queue.ShortTime(left) .. "|r", GameFontDisableSmall, OC.w.time, "RIGHT")
+
 			if r then
-				qc:Button(QW - 120, ly + 6, 112, 20, L["Pegar pedido"], function() Queue.ClaimOrder(x) end, function(tt)
-					tt:SetText(L["Pegar pedido"])
-					tt:AddLine(L["Reivindica o pedido (como o botão da janela de pedidos) e põe 1 na fila."], 1, 1, 1, true)
-				end)
+				local b = qc:Button(OC.claim, ly + 6, OC.w.claim, 20, L["Pegar pedido"],
+					function() if claimedMine == 0 then Queue.ClaimOrder(x) end end, function(tt)
+						tt:SetText(L["Pegar pedido"])
+						if claimedMine > 0 then
+							tt:AddLine(L["Você já tem um pedido pego. Entregue ou largue ele antes de pegar outro."], 1, 0.4, 0.4, true)
+						else
+							tt:AddLine(L["Reivindica o pedido (como o botão da janela de pedidos) e põe 1 na fila."], 1, 1, 1, true)
+						end
+					end)
+				if claimedMine > 0 and b.Disable then b:Disable() end
 			end
 			ly = ly + 34
 			end

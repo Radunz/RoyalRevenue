@@ -648,3 +648,18 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - `UI.Layout` agora guarda a geometria das colunas em `frame.colGeom` (chave, largura, x, e quais estão ocultas) e o `MakeRow` aplica essa geometria na linha que acabou de criar. Sem mudar nada do layout.
 - Conferido também o caminho do ícone de item (pedido do Rafael): `V.ItemIcon` já usa `C_Item.GetItemIconByID` (resolve item fora do cache), cai no 5º retorno do `GetItemInfoInstant`, pede `C_Item.RequestLoadItemDataByID` e redesenha quando o item chega — a interrogação (134400) só aparece sem itemID. O caso real da interrogação com "30" em cima era o Moxie, corrigido na v1.29.0 (era moeda, não item).
 - Teste: t98.lua — janela de 1200 px cria 6 linhas novas e todas herdam a largura da coluna Receita (250), em vez de ficarem sem âncora; e o link `|Hcurrency:3256|h` resolve para o ícone da moeda em vez da interrogação.
+
+## v1.31.0 — Pedidos de fabricação em tabela com colunas (pedido do Rafael)
+- A lista era uma linha solta por pedido: ícone, nome, um subtexto com tudo junto ("Patron · Nome · +1 conhecimento · conc 162"), ícones de recompensa colados no nome, o lucro e o botão. Virou **tabela com cabeçalho e colunas alinhadas**: Item · Custo · Recompensa · Lucro · Reagentes · Tempo · Pegar pedido.
+- **Item**: ícone do item fabricado e, logo em seguida, o nome na cor da qualidade (`GetItemQualityColor`), sem nada entre os dois nem por cima; o patrono ficou como subtexto. Nome longo trunca na largura da coluna.
+- **Custo**: o que sai do seu bolso (só os materiais que VOCÊ fornece), com a lista item a item no tooltip.
+- **Recompensa**: comissão líquida (comissão − consórcio + itens) e, abaixo, os ícones — conhecimento primeiro, depois Moxie e os itens —, cada um com a quantidade sobreposta e tooltip.
+- **Conhecimento**: saiu do subtexto "+1 conhecimento" e virou ícone de recompensa (atlas `Professions_Icon_FirstTimeCraft`, o mesmo que o CraftSim usa) com a quantidade no canto e borda verde.
+- **Reagentes**: ícones dos reagentes que você fornece, com a quantidade sobreposta; **a concentração entra como mais um reagente** (ícone da moeda de concentração da profissão + pontos), saindo do subtexto. Quantidade em **vermelho** quando falta reagente (`Stock.Usable`) ou concentração (`Plan.EstimatedConc`).
+- **Tempo**: tempo restante do pedido (`expirationTime`, que já vinha do jogo e não era usado) — vermelho abaixo de 1 h, amarelo abaixo de 1 dia.
+- **Ordenação**: clique no título ordena (Item, Custo, Recompensa, Lucro, Tempo); clicar de novo inverte. Guardado em `LucroCraftDB.config.orderSort`, padrão lucro decrescente.
+- **Só um pedido pego por vez** (pedido do Rafael): com um pedido já reivindicado neste personagem, o botão dos outros fica desabilitado, com o tooltip explicando. A leitura dos pedidos e o `ClaimOrder` não mudaram.
+- Visual.lua: `Canvas:Icon` ganhou `o.atlas` (ícone por atlas, p/ o conhecimento) e `o.countColor` (quantidade em vermelho); `Canvas:Button` agora volta sempre habilitado do pool (quem precisa chama `:Disable()`).
+- Dois bugs de `and/or` encontrados no caminho (`a and b or c` cai no `c` quando `b` é falso): o comparador da ordenação invertia errado e o clique repetido no título não alternava a direção. Os dois viraram `if` explícito.
+- Harness: `Enable`/`Disable`/`IsEnabled` nos widgets (eram noop), para dar para testar botão desabilitado.
+- Teste: t99.lua — colunas em ordem sem sobreposição, tempo (expirado/15min/2h/2d), ordenação por cada coluna e a inversão no segundo clique, o desenho da tabela com títulos, e os botões "Pegar pedido" habilitados (2/0) sem pedido pego e desabilitados (0/2) com um pego.

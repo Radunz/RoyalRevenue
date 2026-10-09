@@ -205,7 +205,14 @@ function Canvas:Icon(x, y, size, texture, o)
 	end)
 	b:SetPoint("TOPLEFT", self.child, "TOPLEFT", x, -y)
 	b:SetSize(size, size)
-	b.tex:SetTexture(texture or 134400)
+	-- atlas (ex.: ícone de conhecimento da profissão) em vez de arquivo de textura
+	if o.atlas and b.tex.SetAtlas then
+		b.tex:SetAtlas(o.atlas)
+		b.tex:SetTexCoord(0, 1, 0, 1)
+	else
+		b.tex:SetTexture(texture or 134400)
+		b.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+	end
 	b.tex:SetDesaturated(o.desaturate and true or false)
 	local br, bg, bb = 0.5, 0.5, 0.5
 	if o.border then
@@ -221,6 +228,9 @@ function Canvas:Icon(x, y, size, texture, o)
 		b.shade:Hide()
 	end
 	b.count:SetText(o.count or "")
+	-- quantidade em vermelho quando falta (reagente/concentração insuficiente)
+	local cc = o.countColor
+	b.count:SetTextColor(cc and cc[1] or 1, cc and cc[2] or 1, cc and cc[3] or 1)
 	b.q:SetText(o.quality or "")
 	b.corner:SetText(o.corner or "")
 	b.tip, b.link, b.onClick = o.tip, o.link, o.onClick
@@ -457,6 +467,7 @@ function Canvas:Button(x, y, w, h, text, onClick, tip)
 	b:SetPoint("TOPLEFT", self.child, "TOPLEFT", x, -y)
 	b:SetSize(w, h)
 	b:SetText(text or "")
+	b:Enable()   -- o pool reaproveita botões: sempre volta habilitado (quem precisa chama :Disable())
 	b.onClick, b.tip = onClick, tip
 	return b
 end
