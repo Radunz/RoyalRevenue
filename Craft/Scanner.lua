@@ -1099,6 +1099,8 @@ local function CollectRows(targetID, unknown)
 						name = info.name,
 						itemName = itemID and C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or nil,
 						icon = info.icon,
+						-- bônus de primeira fabricação (dá conhecimento extra enquanto não foi feita)
+						firstCraft = info.firstCraft or nil,
 						itemID = itemID,
 						quality = baseQ,
 						maxQuality = maxQ > 0 and maxQ or nil,

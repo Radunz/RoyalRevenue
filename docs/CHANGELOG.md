@@ -670,3 +670,10 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - **"Todas as ordens usam concentração"**: a coluna Reagentes mostrava também a concentração OPCIONAL (a da v1.29.0, que aparece quando o pedido aceita a qualidade de baixo) — ou seja, em quase todas as linhas. Agora só a concentração **obrigatória** (exigida pela qualidade mínima) vira reagente; a opcional continua no tooltip do item.
 - **Número saindo do ícone**: a quantidade usava `NumberFontNormal` num ícone de 22 px e vazava por cima do ícone vizinho (no print virava "2.394", "8.294"). `Canvas:Icon` agora usa `NumberFontNormalSmall` em ícone pequeno ou número de 4+ dígitos, e abrevia acima de mil ("1,2k" / "12k"). O espaçamento entre ícones subiu de 23 para 25 px (recompensas) e 26 px (reagentes).
 - Teste: t99.lua atualizado — colunas em 1200/750/520 px, sempre na ordem e sem o nome invadir a coluna Custo; e a concentração obrigatória virando reagente enquanto a opcional não.
+
+## v1.31.2 — livro amarelo só no bônus de primeira fabricação (print do Rafael)
+- O ícone `Professions_Icon_FirstTimeCraft` (o livro amarelo) estava sendo usado para QUALQUER recompensa de conhecimento, então aparecia em quase toda linha. Mas esse ícone é o de **primeira fabricação** — é para o que o CraftSim usa.
+- `Queue.IsFirstCraft(r)`: lê `firstCraft` do `C_TradeSkillUI.GetRecipeInfo` ao vivo (a receita pode ter sido fabricada depois do último scan) e, sem a API, cai no `r.firstCraft` guardado no scan. Cache de 30 s.
+- Scanner: a linha da receita passou a guardar `r.firstCraft` (do `info.firstCraft`), para valer também nos outros personagens.
+- Na coluna Recompensa o livro só aparece quando a receita ainda não foi fabricada, com borda dourada e tooltip "Primeira fabricação". O conhecimento vindo de item de recompensa voltou a ser marcado pela **borda verde** no ícone do próprio item (que já aparece na coluna), em vez de um ícone separado.
+- Teste: t99.lua ganhou a checagem — scan com/sem `firstCraft`, e o dado ao vivo do jogo prevalecendo sobre um scan desatualizado nos dois sentidos.

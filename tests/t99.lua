@@ -1,6 +1,6 @@
--- v1.31.0: pedidos de fabricação em tabela com colunas (Item · Custo · Recompensa · Lucro ·
--- Reagentes · Tempo · Pegar pedido), ordenável pelo título, conhecimento como ícone de recompensa,
--- concentração como reagente e só UM pedido pode ser pego por vez.
+-- v1.31.2: pedidos de fabricação em tabela com colunas (Item · Custo · Reagentes · Recompensa ·
+-- Lucro · Tempo · Pegar pedido), ordenável pelo título, concentração obrigatória como reagente,
+-- livro amarelo só no bônus de primeira fabricação e só UM pedido pego por vez.
 dofile("harness11.lua")
 local C = RR.Craft
 local Q = C.Queue
@@ -119,3 +119,16 @@ pcall(Q.Render, cv)
 on, off = BotoesClaim()
 print(string.format("  com um pedido pego: habilitados=%d desabilitados=%d", on, off))
 print(off > 0 and on == 0 and "OK: com um pedido pego, nenhum outro pode ser pego" or "FALHA: deixou pegar mais de um")
+
+print("")
+print("=== livro amarelo só no bônus de primeira fabricação ===")
+C_TradeSkillUI.GetRecipeInfo = nil
+print(string.format("  scan firstCraft=true -> %s", tostring(Q.IsFirstCraft({ recipeID = 901, firstCraft = true }))))
+print(string.format("  scan sem firstCraft  -> %s", tostring(Q.IsFirstCraft({ recipeID = 902 }))))
+C_TradeSkillUI.GetRecipeInfo = function(id) return { firstCraft = (id == 910) } end
+local vivoSim = Q.IsFirstCraft({ recipeID = 910, firstCraft = false })
+local vivoNao = Q.IsFirstCraft({ recipeID = 911, firstCraft = true })
+print(string.format("  jogo diz sim (scan dizia não) -> %s", tostring(vivoSim)))
+print(string.format("  jogo diz não (scan dizia sim) -> %s", tostring(vivoNao)))
+print((vivoSim and not vivoNao) and "OK: vale o dado do jogo, não o do scan antigo"
+	or "FALHA: não está preferindo o dado ao vivo")

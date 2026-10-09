@@ -808,6 +808,24 @@ function Queue.SortOrders(list)
 		return ((a.row and a.row.name) or "") < ((b.row and b.row.name) or "")
 	end)
 end
+-- Bônus de PRIMEIRA fabricação: só ele usa o ícone do livro (Professions_Icon_FirstTimeCraft).
+-- Prefere o dado ao vivo do jogo (a receita pode ter sido feita depois do último scan).
+local fcCache, fcT = {}, 0
+function Queue.IsFirstCraft(r)
+	if not (r and r.recipeID) then return false end
+	if time() - fcT > 30 then fcCache, fcT = {}, time() end
+	local v = fcCache[r.recipeID]
+	if v ~= nil then return v end
+	local live
+	if C_TradeSkillUI and C_TradeSkillUI.GetRecipeInfo then
+		local ok, info = pcall(C_TradeSkillUI.GetRecipeInfo, r.recipeID)
+		if ok and type(info) == "table" and info.firstCraft ~= nil then live = info.firstCraft and true or false end
+	end
+	if live == nil then live = r.firstCraft and true or false end   -- reserva: o que o scan guardou
+	fcCache[r.recipeID] = live
+	return live
+end
+
 -- tempo restante até o pedido expirar
 function Queue.OrderTimeLeft(x)
 	local exp = x.exp or (x.order and x.order.expirationTime)
@@ -1280,19 +1298,21 @@ function Queue.Render(cv)
 				end
 			end
 			local rx, rmax = OC.reward, OC.reward + OC.w.reward - 22
-			-- conhecimento primeiro, como ícone próprio (saiu do subtexto)
-			if (x.kp or 0) > 0 then
-				qc:Icon(rx, ly + 14, 20, nil, { atlas = "Professions_Icon_FirstTimeCraft", count = tostring(x.kp),
-					border = { 0.3, 1, 0.3 }, tip = function(tt)
-						tt:SetText(L["Conhecimento da profissão"])
-						tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], x.kp), 0.3, 1, 0.3, true)
+			-- o livro só aparece no bônus de PRIMEIRA fabricação desta receita
+			if Queue.IsFirstCraft(r) then
+				qc:Icon(rx, ly + 14, 20, nil, { atlas = "Professions_Icon_FirstTimeCraft",
+					border = { 1, 0.82, 0 }, tip = function(tt)
+						tt:SetText(L["Primeira fabricação"])
+						tt:AddLine(L["Você ainda não fabricou esta receita: a primeira dá conhecimento extra."], 1, 1, 1, true)
 					end })
 				rx = rx + 25
 			end
 			for _, rw in ipairs(x.rewList or {}) do
 				if rx > rmax then break end
 				-- moeda (Moxie) tem o ícone dela; item fora do cache resolve pelo GetItemIconByID
+				-- borda verde = essa recompensa dá conhecimento da profissão
 				qc:Icon(rx, ly + 14, 20, rw.icon or V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
+					border = rw.kp and { 0.3, 1, 0.3 } or nil,
 					link = rw.link, tip = function(tt)
 						if rw.currency and tt.SetCurrencyByID then tt:SetCurrencyByID(rw.currency)
 						elseif rw.id then tt:SetItemByID(rw.id)
