@@ -808,15 +808,18 @@ local function Create()
 	grip:SetScript("OnMouseUp", function()
 		frame:StopMovingOrSizing()
 		ns.root.FitToScreen(frame)
-		LucroCraftDB.size = { math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5) }
+		RoyalRevenueDB = RoyalRevenueDB or {}
+		RoyalRevenueDB.winSize = { math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5) }
 		local point, _, relPoint, x, y = frame:GetPoint()
 		LucroCraftDB.pos = { point, relPoint, x, y }
 		UI.OnResize()
+		if ns.root.ApplyLivroSize then ns.root.ApplyLivroSize() end
 	end)
 	grip:SetScript("OnDoubleClick", function()
-		LucroCraftDB.size = nil
+		RoyalRevenueDB.winSize = nil
 		UI.ApplyTabSize(frame.currentTab or 1)
 		UI.OnResize()
+		if ns.root.ApplyLivroSize then ns.root.ApplyLivroSize() end
 	end)
 	grip:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
@@ -1277,7 +1280,7 @@ end
 function UI.ApplyTabSize(id)
 	if not frame then return end
 	local minW = TabMinWidth(id)
-	local sz = LucroCraftDB.size
+	local sz = RoyalRevenueDB and RoyalRevenueDB.winSize
 	local maxW, maxH = ns.root.ScreenMax(frame)
 	local w, h
 	if sz then
@@ -1298,6 +1301,8 @@ function UI.ApplyTabSize(id)
 		frame:SetSize(w, h)
 	end
 end
+-- chamado pelo Livro-caixa quando ele muda o tamanho compartilhado (RoyalRevenueDB.winSize)
+ns.root.ApplyCraftSize = function() if frame then UI.ApplyTabSize(frame.currentTab or 1) end end
 
 -- quantas linhas cada grupo da lista de receitas mostra, conforme a altura da janela.
 -- Grupo minimizado (ou oculto) = só o título; grupo com menos receitas que a sua parte cede o resto aos outros.

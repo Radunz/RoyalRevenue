@@ -583,3 +583,10 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - `UI.ApplyTabSize`: com tamanho salvo, usa ele direto (só limitado pela tela, nunca pelo mínimo da aba); sem tamanho salvo (1ª vez), continua usando o padrão de cada aba como antes. O limite de redimensionar na mão (`SetResizeBounds`/`SetMinResize`) usa o menor entre o mínimo da aba e o tamanho atual, pra não forçar a janela a crescer até lá.
 - A janela do Livro-caixa é outra (não compartilha o tamanho com Craft/Mercado) e já não tinha esse problema — não mudei nada nela.
 - Teste: com `LucroCraftDB.size = {800,500}`, trocar entre Receitas, Configurações e Comprar manteve 800×500 nas 3 (antes a aba de Receitas/Comprar, que pedem mais largura, crescia a janela).
+
+## v1.26.2 — mesmo tamanho nas janelas Craft/Mercado e Livro-caixa (pedido do Rafael)
+- Causa: eram duas janelas com tamanho salvo cada uma na sua conta (`LucroCraftDB.size` e `LucroLivroDB.size`) — redimensionar uma não refletia na outra.
+- Tamanho agora é um só, em `RoyalRevenueDB.winSize` (a tabela já compartilhada entre os dois módulos, usada pra idioma/escala/última aba). Cada janela continua com o próprio mínimo (Craft: o da aba atual; Livro: 780×460 fixo) e o próprio máximo (tamanho da tela).
+- Redimensionar a alça de uma janela aplica o novo tamanho na outra na hora, se ela já existir (`root.ApplyLivroSize()` / `root.ApplyCraftSize()`). Abrir o Livro-caixa (`OnShow`) também confere o tamanho compartilhado, pro caso de ter mudado com a janela fechada.
+- `/rr reset`: volta as duas pro tamanho padrão de cada uma (limpa `RoyalRevenueDB.winSize`), e ao centro da tela (posição continua por janela, não é compartilhada).
+- Teste: redimensionar o Craft pra 820×550 e chamar `ApplyLivroSize` deixou o Livro em 820×550 também; redimensionar o Livro e chamar `ApplyCraftSize` fez o Craft seguir (largura exata; altura limitada pela tela quando passa do que cabe, como já era antes).

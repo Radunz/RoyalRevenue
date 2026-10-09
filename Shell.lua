@@ -283,16 +283,16 @@ SlashCmdList.ROYALREVENUE = function(msg)
 	elseif cmd == "destruir" or cmd == "salvage" then root.Open("craft", C.UI.TAB.SALVAGE)
 	elseif cmd == "config" or cmd == "opcoes" or cmd == "opções" or cmd == "settings" then root.Open("settings")
 	elseif cmd == "reset" or cmd == "resetar" then
-		-- janelas de volta ao tamanho padrão e ao centro da tela
-		if LucroCraftDB then LucroCraftDB.size, LucroCraftDB.pos = nil, nil end
-		if LucroLivroDB then LucroLivroDB.size, LucroLivroDB.pos = nil, nil end
+		-- janelas de volta ao tamanho padrão (compartilhado) e ao centro da tela
+		if RoyalRevenueDB then RoyalRevenueDB.winSize = nil end
+		if LucroCraftDB then LucroCraftDB.pos = nil end
+		if LucroLivroDB then LucroLivroDB.pos = nil end
 		for _, f in ipairs({ _G.LucroCraftFrame, _G.LucroLivroFrame }) do
 			if f then f:ClearAllPoints(); f:SetPoint("CENTER") end
 		end
 		local cf = _G.LucroCraftFrame
 		if cf and C.UI.ApplyTabSize then C.UI.ApplyTabSize(C.UI.CurrentTab and C.UI.CurrentTab() or 1); if C.UI.OnResize then pcall(C.UI.OnResize) end end
-		local lf = _G.LucroLivroFrame
-		if lf then lf:SetSize(1000, 640) end
+		if root.ApplyLivroSize then root.ApplyLivroSize() end
 		print(root.NAME .. ": " .. L("janelas no tamanho padrão e no centro da tela."))
 	elseif cmd == "minimapa" or cmd == "minimap" then if LV.Minimap then LV.Minimap.Toggle() end
 	elseif cmd:match("^escala") or cmd:match("^scale") then

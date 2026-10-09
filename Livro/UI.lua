@@ -1295,10 +1295,23 @@ function UI.CharMenu(owner)
 	end
 end
 
+-- tamanho compartilhado com a janela Craft/Mercado (RoyalRevenueDB.winSize); mínimo próprio (780x460)
+local function ApplySize()
+	if not frame then return end
+	local sz = RoyalRevenueDB and RoyalRevenueDB.winSize
+	local maxW, maxH = 2000, 1400
+	if root.ScreenMax then maxW, maxH = root.ScreenMax(frame) end
+	local w = math.min(math.max(sz and sz[1] or 1000, 780), math.max(maxW, 780))
+	local h = math.min(math.max(sz and sz[2] or 640, 460), math.max(maxH, 460))
+	if math.abs(frame:GetWidth() - w) > 0.5 or math.abs(frame:GetHeight() - h) > 0.5 then
+		frame:SetSize(w, h)
+	end
+end
+root.ApplyLivroSize = ApplySize
+
 local function Create()
 	frame = CreateFrame("Frame", "LucroLivroFrame", UIParent, "BasicFrameTemplateWithInset")
-	local sz = LucroLivroDB.size
-	frame:SetSize(sz and sz[1] or 1000, sz and sz[2] or 640)
+	ApplySize()
 	frame:SetPoint("CENTER")
 	-- camada normal das janelas (como as de outros addons): quem foi clicada por último fica por cima
 	frame:SetFrameStrata("MEDIUM")
@@ -1431,10 +1444,10 @@ local function Create()
 	end
 	frame.numTabs = #TABS
 	frame:SetScript("OnShow", function()
+		ApplySize()
 		if root.FitToScreen and root.FitToScreen(frame) then
 			local p, _, rp, x, y = frame:GetPoint()
 			LucroLivroDB.pos = { p, rp, x, y }
-			LucroLivroDB.size = { math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5) }
 		end
 		UI.Refresh()
 	end)
@@ -1459,15 +1472,18 @@ local function Create()
 	grip:SetScript("OnMouseUp", function()
 		frame:StopMovingOrSizing()
 		if root.FitToScreen then root.FitToScreen(frame) end
-		LucroLivroDB.size = { math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5) }
+		RoyalRevenueDB = RoyalRevenueDB or {}
+		RoyalRevenueDB.winSize = { math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5) }
 		local p, _, rp, x, y = frame:GetPoint()
 		LucroLivroDB.pos = { p, rp, x, y }
 		UI.Refresh()
+		if root.ApplyCraftSize then root.ApplyCraftSize() end
 	end)
 	grip:SetScript("OnDoubleClick", function()
-		LucroLivroDB.size = nil
-		frame:SetSize(1000, 640)
+		RoyalRevenueDB.winSize = nil
+		ApplySize()
 		UI.Refresh()
+		if root.ApplyCraftSize then root.ApplyCraftSize() end
 	end)
 	grip:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
