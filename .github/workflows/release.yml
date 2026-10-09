@@ -1,0 +1,28 @@
+name: Release addon
+
+# Dispara ao empurrar uma tag "vX.Y.Z" (ex.: git tag v1.25.1 && git push origin v1.25.1).
+# Usa o BigWigs Packager (padrão da comunidade WoW): ele lê RoyalRevenue/RoyalRevenue.toc,
+# zipa só a pasta do addon e envia pro CurseForge + cria a release no GitHub (pro WowUp).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package and release
+        uses: BigWigsMods/packager@v2
+        working-directory: RoyalRevenue
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
