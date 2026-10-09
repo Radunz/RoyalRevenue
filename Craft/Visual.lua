@@ -584,6 +584,24 @@ function V.ItemIcon(itemID, fallback)
 	return tex or fallback or 134400
 end
 
+-- ===== Moedas (Moxie, concentração, conhecimento) =====
+-- Recompensa de patrono em moeda vem sem itemLink: { count = 30, currencyType = 3257 }.
+local curCache = {}
+local function CurInfo(id)
+	if not id then return nil end
+	local c = curCache[id]
+	if c ~= nil then return c or nil end
+	local info
+	if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+		local ok, v = pcall(C_CurrencyInfo.GetCurrencyInfo, id)
+		if ok and type(v) == "table" then info = v end
+	end
+	curCache[id] = info or false
+	return info
+end
+function V.CurrencyIcon(id) local i = CurInfo(id); return i and i.iconFileID or nil end
+function V.CurrencyName(id) local i = CurInfo(id); return i and i.name or nil end
+
 -- nome do item; item que o cliente ainda não carregou: pede ao servidor e a aba é redesenhada quando chegar
 function V.ItemName(itemID)
 	local name = itemID and C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID)

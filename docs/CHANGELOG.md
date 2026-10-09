@@ -677,3 +677,10 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - Scanner: a linha da receita passou a guardar `r.firstCraft` (do `info.firstCraft`), para valer também nos outros personagens.
 - Na coluna Recompensa o livro só aparece quando a receita ainda não foi fabricada, com borda dourada e tooltip "Primeira fabricação". O conhecimento vindo de item de recompensa voltou a ser marcado pela **borda verde** no ícone do próprio item (que já aparece na coluna), em vez de um ícone separado.
 - Teste: t99.lua ganhou a checagem — scan com/sem `firstCraft`, e o dado ao vivo do jogo prevalecendo sobre um scan desatualizado nos dois sentidos.
+
+## v1.31.3 — Moxie finalmente com o ícone certo (print do Rafael, CraftSim x Royal lado a lado)
+- Causa (achada no SavedVariables real do Saalla/Ferraria): a recompensa de Moxie **não tem `itemLink` nenhum**. O jogo manda `{ count = 30, currencyType = 3257 }`, enquanto as outras vêm como `{ count = 1, itemLink = "|cnIQ2:|Hitem:246448...|h[Artisan's Ledger]|h|r" }`. A v1.29.0 passou a ler `currency:(%d+)` do LINK — mas como não há link, continuava sem id, sem ícone e caindo na interrogação, com o tooltip genérico "Valor na AH: vinculado / sem preço".
+- Agora lê `rw.currencyType` direto (o parse do link fica como reserva). O 3257 é o Moxie de Ferraria, o mesmo mapa que o CraftSim usa (3256 Alquimia … 3266 Alfaiataria).
+- Visual.lua: `V.CurrencyIcon(id)` e `V.CurrencyName(id)` com cache, num lugar só — Queue.lua usa os dois em vez de repetir `C_CurrencyInfo.GetCurrencyInfo` em três pontos.
+- Tooltip da recompensa: moeda mostra o tooltip da própria moeda (`SetCurrencyByID`) e a quantidade, **sem** a linha "Valor na AH" (que só faz sentido para item).
+- Teste: t99.lua ganhou os 3 formatos reais de recompensa (item com nome, moeda por `currencyType` sem link, item com nome vazio ainda não carregado) — nenhum cai na interrogação.

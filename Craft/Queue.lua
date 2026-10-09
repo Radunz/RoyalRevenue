@@ -505,12 +505,11 @@ local function Eval(o)
 	for _, rw in ipairs(o.npcOrderRewards or {}) do
 		-- link novo da Midnight ("|cnIQ1:|Hitem:...|h[]|h|r", às vezes sem nome): o id sai do próprio link
 		local id = rw.itemLink and (tonumber(rw.itemLink:match("item:(%d+)")) or C_Item.GetItemInfoInstant(rw.itemLink))
-		local curID = (not id) and rw.itemLink and tonumber(rw.itemLink:match("currency:(%d+)")) or nil
-		local icon
-		if curID and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
-			local okC, info = pcall(C_CurrencyInfo.GetCurrencyInfo, curID)
-			if okC and type(info) == "table" then icon = info.iconFileID end
-		end
+		-- Moxie vem SEM itemLink: o jogo manda { count = 30, currencyType = 3257 }.
+		-- (o link com "currency:" fica como reserva, caso alguma recompensa venha assim)
+		local curID = rw.currencyType
+			or ((not id) and rw.itemLink and tonumber(rw.itemLink:match("currency:(%d+)")) or nil)
+		local icon = curID and ns.Visual.CurrencyIcon(curID) or nil
 		local v = id and ns.Pricing.Sale(id)
 		rew = rew + (v or 0) * (rw.count or 1)
 		local k = Queue.KnowledgeOf(rw.itemLink, id)
@@ -1221,8 +1220,7 @@ function Queue.Render(cv)
 				if x.cut > 0 then tt:AddDoubleLine(L["Corte do consórcio"], "-" .. P.FormatMoney(x.cut), 1, 0.82, 0, 0.9, 0.5, 0.5) end
 				for _, rw in ipairs(x.rewList) do
 					local nome = (rw.id and C_Item.GetItemNameByID(rw.id))
-						or (rw.currency and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
-							and (select(2, pcall(C_CurrencyInfo.GetCurrencyInfo, rw.currency)) or {}).name)
+						or (rw.currency and V.CurrencyName(rw.currency))
 						or rw.link or "?"
 					tt:AddDoubleLine((rw.n > 1 and (rw.n .. "x ") or "") .. nome, rw.v and P.FormatMoney(rw.v * rw.n) or "?", 1, 1, 1, 0.3, 1, 0.3)
 				end
@@ -1314,12 +1312,18 @@ function Queue.Render(cv)
 				qc:Icon(rx, ly + 14, 20, rw.icon or V.ItemIcon(rw.id), { count = rw.n > 1 and tostring(rw.n) or nil,
 					border = rw.kp and { 0.3, 1, 0.3 } or nil,
 					link = rw.link, tip = function(tt)
-						if rw.currency and tt.SetCurrencyByID then tt:SetCurrencyByID(rw.currency)
+						if rw.currency then
+							if tt.SetCurrencyByID then tt:SetCurrencyByID(rw.currency)
+							else tt:SetText(V.CurrencyName(rw.currency) or "?") end
 						elseif rw.id then tt:SetItemByID(rw.id)
 						elseif rw.link then tt:SetHyperlink(rw.link) end
 						tt:AddLine(" ")
+						if rw.n > 1 then tt:AddDoubleLine(L["Quantidade"], root.Num(rw.n, 0), 1, 0.82, 0, 1, 1, 1) end
 						if rw.kp then tt:AddLine(string.format(L["Dá %d ponto(s) de conhecimento da profissão."], rw.kp * rw.n), 0.3, 1, 0.3) end
-						tt:AddDoubleLine(L["Valor na AH"], rw.v and P.FormatMoney(rw.v * rw.n) or L["vinculado / sem preço"], 1, 0.82, 0, 1, 1, 1)
+						-- moeda não tem preço de AH: a linha só vale para item
+						if not rw.currency then
+							tt:AddDoubleLine(L["Valor na AH"], rw.v and P.FormatMoney(rw.v * rw.n) or L["vinculado / sem preço"], 1, 0.82, 0, 1, 1, 1)
+						end
 					end })
 				rx = rx + 25
 			end

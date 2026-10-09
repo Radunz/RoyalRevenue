@@ -132,3 +132,28 @@ print(string.format("  jogo diz sim (scan dizia não) -> %s", tostring(vivoSim))
 print(string.format("  jogo diz não (scan dizia sim) -> %s", tostring(vivoNao)))
 print((vivoSim and not vivoNao) and "OK: vale o dado do jogo, não o do scan antigo"
 	or "FALHA: não está preferindo o dado ao vivo")
+
+print("")
+print("=== recompensas: os 3 formatos que o jogo manda ===")
+-- vindos do SavedVariables real (Saalla, Ferraria): item com nome, MOEDA sem link, item sem nome
+C_CurrencyInfo = { GetCurrencyInfo = function(id)
+	local m = { [3257] = { name = "Artisan Blacksmith's Moxie", iconFileID = 5931173 } }
+	return m[id]
+end }
+C_Item.GetItemIconByID = function(id) return 1000000 + id end
+local rews = {
+	{ count = 1, itemLink = "|cnIQ2:|Hitem:246448::::::::90:70:::::::::|h[Artisan's Ledger]|h|r" },
+	{ count = 30, currencyType = 3257 },
+	{ count = 1, itemLink = "|cnIQ1:|Hitem:246322::::::::90:70:::::::::|h[]|h|r" },
+}
+local todosOk = true
+for i, rw in ipairs(rews) do
+	local id = rw.itemLink and (tonumber(rw.itemLink:match("item:(%d+)")) or C_Item.GetItemInfoInstant(rw.itemLink))
+	local curID = rw.currencyType or ((not id) and rw.itemLink and tonumber(rw.itemLink:match("currency:(%d+)")) or nil)
+	local icon = curID and C.Visual.CurrencyIcon(curID) or C.Visual.ItemIcon(id)
+	if icon == 134400 then todosOk = false end
+	print(string.format("  %d) itemID=%-8s currencyType=%-6s n=%-3d ícone=%-9s %s", i, tostring(id), tostring(curID),
+		rw.count, tostring(icon), icon == 134400 and "<< interrogação" or "ok"))
+end
+print(todosOk and "OK: nenhuma recompensa caiu na interrogação (Moxie vem por currencyType, sem link)"
+	or "FALHA: alguma recompensa ainda cai na interrogação")
