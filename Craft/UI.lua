@@ -1272,21 +1272,27 @@ local function TabMinWidth(id)
 	return 760
 end
 
--- aplica o tamanho escolhido pelo usuário (ou o padrão), respeitando o mínimo da aba
+-- aplica o tamanho escolhido pelo usuário (ou o padrão, na 1ª vez); igual em todas as abas,
+-- nunca força a janela a crescer até o mínimo de uma aba específica
 function UI.ApplyTabSize(id)
 	if not frame then return end
 	local minW = TabMinWidth(id)
 	local sz = LucroCraftDB.size
-	local w = sz and sz[1] or math.max(DEFAULT_WIDTH[id] or 0, minW)
-	local h = sz and sz[2] or DEFAULT_HEIGHT
-	-- nunca maior que a tela (o canto de redimensionar fica sempre alcançável)
 	local maxW, maxH = ns.root.ScreenMax(frame)
-	w = math.min(math.max(w, minW), math.max(maxW, minW))
-	h = math.min(math.max(h, 420), math.max(maxH, 420))
+	local w, h
+	if sz then
+		w = math.min(math.max(sz[1], 1), math.max(maxW, 1))
+		h = math.min(math.max(sz[2], 420), math.max(maxH, 420))
+	else
+		w = math.min(math.max(DEFAULT_WIDTH[id] or minW, minW), math.max(maxW, minW))
+		h = math.min(math.max(DEFAULT_HEIGHT, 420), math.max(maxH, 420))
+	end
+	-- limite pra redimensionar na mão: não deixa menor que o mínimo da aba atual, mas sem forçar a janela a crescer até lá
+	local boundMinW = math.min(minW, w)
 	if frame.SetResizeBounds then
-		pcall(frame.SetResizeBounds, frame, minW, 420, math.max(maxW, minW), math.max(maxH, 420))
+		pcall(frame.SetResizeBounds, frame, boundMinW, 420, math.max(maxW, boundMinW), math.max(maxH, 420))
 	elseif frame.SetMinResize then
-		pcall(frame.SetMinResize, frame, minW, 420)
+		pcall(frame.SetMinResize, frame, boundMinW, 420)
 	end
 	if math.abs(frame:GetWidth() - w) > 0.5 or math.abs(frame:GetHeight() - h) > 0.5 then
 		frame:SetSize(w, h)
