@@ -25,16 +25,18 @@ local Cfg = ns.Cfg
 
 local ROW_H = 18
 local NUM_ROWS = 22
--- lista dividida em 4 grupos empilhados (cada um pode ser minimizado clicando no título):
--- volume | baixo volume e alto lucro | sem lucro | receitas desconhecidas (ainda não aprendidas, com lucro)
+-- lista dividida em 3 grupos empilhados (cada um pode ser minimizado clicando no título):
+-- com lucro | sem lucro | receitas desconhecidas (ainda não aprendidas, com lucro)
 -- weight = parte do espaço livre; grupo com poucas linhas cede o que sobra aos outros
+-- A divisão por volume (Volume x Baixo volume, alto lucro) saiu na v1.28.0: o que separa a lista
+-- agora são as ABAS Concentração / Sem concentração (UI.RecipeList).
 local SECTIONS = {
-	{ title = L["Volume"], desc = L["lucro vem da quantidade"], rows = 8, weight = 9 },
-	{ title = L["Baixo volume, alto lucro"], desc = L["vende pouco, ganha muito por craft"], rows = 7, weight = 8 },
+	{ title = L["Com lucro"], desc = L["dá lucro agora"], rows = 13, weight = 15 },
 	{ title = L["Sem lucro"], desc = L["prejuízo ou sem preço de venda"], rows = 5, weight = 5 },
 	{ title = L["Receitas desconhecidas"], desc = L["ainda não aprendidas, com lucro"], rows = 5, weight = 6 },
 }
-local TRANSMUTE, UNKNOWN = nil, 4   -- transmutações têm a parte delas na aba Destruir
+local TRANSMUTE, UNKNOWN = nil, 3   -- transmutações têm a parte delas na aba Destruir
+local NOPROFIT = 2
 
 -- grupos minimizados: LucroCraftDB.config.collapsed[índice] = true
 local function IsCollapsed(si)
@@ -46,9 +48,28 @@ local function IsCollapsed(si)
 		cfg.secMig6 = true
 		if cfg.collapsed then cfg.collapsed[4], cfg.collapsed[5] = cfg.collapsed[5], nil end
 	end
+	-- v1.28.0: Volume + Baixo volume viraram um grupo só; sem lucro 3->2, desconhecidas 4->3
+	if not cfg.secMig7 then
+		cfg.secMig7 = true
+		local c = cfg.collapsed
+		if c then
+			local comLucro = (c[1] and c[2]) and true or nil   -- só fica minimizado se os dois estavam
+			c[1], c[2], c[3], c[4] = comLucro, c[3], c[4], nil
+		end
+	end
 	local c = cfg.collapsed
 	return c and c[si] and true or false
 end
+
+-- ===== Abas da lista: Concentração x Sem concentração =====
+-- "conc" lista só os resultados que GASTAM concentração (a qualidade de cima);
+-- "noconc" lista o resto (craft normal, reagentes superiores, revenda de NPC).
+local RECIPE_LISTS = { { key = "conc", label = "Concentração" }, { key = "noconc", label = "Sem concentração" } }
+function UI.RecipeList()
+	local v = LucroCraftDB and LucroCraftDB.config and LucroCraftDB.config.recipeList
+	return (v == "noconc") and "noconc" or "conc"
+end
+-- UI.SetRecipeList fica depois do "state" (local usado por função definida antes dele vira nil)
 local TOTAL_ROWS = 0
 for _, sec in ipairs(SECTIONS) do TOTAL_ROWS = TOTAL_ROWS + sec.rows + 1 end   -- +1 = linha do título
 local WIDTH = 760
@@ -114,10 +135,16 @@ end
 local state = {
 	offset = 0,
 	offsets = { 0, 0, 0, 0, 0 },
-	views = { {}, {}, {}, {} },
+	views = { {}, {}, {} },
 	view = nil,       -- linhas filtradas/ordenadas
 	profID = nil,     -- profissão exibida
 }
+
+function UI.SetRecipeList(key)
+	LucroCraftDB.config.recipeList = (key == "noconc") and "noconc" or "conc"
+	state.offset = 0; state.offsets = { 0, 0, 0, 0, 0 }
+	UI.Refresh()
+end
 
 local frame
 
@@ -263,12 +290,16 @@ end
 
 UI._Variants = Variants
 
--- 1 = volume (lucrativo e vende bastante), 2 = baixo volume/alto lucro, 3 = sem lucro
+-- 1 = com lucro, 2 = sem lucro (a divisão por volume saiu na v1.28.0)
 function UI.Category(r)
 	local best = r.profit
-	if r.excluded or not best or best <= 0 then return 3 end
-	if (r.spd or 0) >= (tonumber(Cfg("volumeMinSpd")) or 10) then return 1 end
-	return 2
+	if r.excluded or not best or best <= 0 then return NOPROFIT end
+	return 1
+end
+-- a linha pertence à aba aberta? ("conc" = gasta concentração; "noconc" = o resto)
+local function InRecipeList(v)
+	local isConc = v.variant == "conc"
+	return isConc == (UI.RecipeList() == "conc")
 end
 
 local function BuildView()
@@ -309,10 +340,10 @@ local function BuildView()
 		table.sort(view, state.cmp)
 	end
 	state.view = view
-	-- separa nas seções
-	state.views = { {}, {}, {}, {} }
+	-- separa nas seções, só o que pertence à aba aberta (Concentração x Sem concentração)
+	state.views = { {}, {}, {} }
 	for _, r in ipairs(view) do
-		table.insert(state.views[UI.Category(r)], r)
+		if InRecipeList(r) then table.insert(state.views[UI.Category(r)], r) end
 	end
 	-- receitas desconhecidas: só as variações que dão lucro (sem revenda de NPC)
 	if entry and entry.unknown then
@@ -320,7 +351,7 @@ local function BuildView()
 		for _, r in ipairs(entry.unknown) do
 			for _, v in ipairs(Variants(r)) do
 				local p = v.profit
-				if v.variant ~= "npc" and not v.excluded and type(p) == "number" and p > 0 then
+				if InRecipeList(v) and v.variant ~= "npc" and not v.excluded and type(p) == "number" and p > 0 then
 					if v.variant ~= "npc" and ns.Stock then
 						rawset(v, "craftable", ns.Stock.CraftsFor(v.parts) or false)
 					end
@@ -476,10 +507,21 @@ function UI.Refresh()
 		frame.profLabel:SetText(L["|cff9d9d9dNenhum dado. Abra sua profissão para escanear.|r"])
 	end
 
+	-- abas da lista: a ativa em dourado
+	local curList = UI.RecipeList()
+	for i, b in ipairs(frame.listTabs or {}) do
+		local on = b.key == curList
+		b.bg:SetColorTexture(0.06, 0.1, 0.2, 1)
+		b.edge:SetColorTexture(on and 0.83 or 0.3, on and 0.69 or 0.3, on and 0.22 or 0.35, on and 0.95 or 0.6)
+		local n = #(state.views and state.views[1] or {})
+		b.text:SetText((on and "|cffffd100" or "|cffd9dde3") .. L[RECIPE_LISTS[i].label]
+			.. (on and string.format("  |cff9d9d9d(%d)|r", n) or "") .. "|r")
+	end
+
 	UI.LayoutRows()
 	for si, sec in ipairs(frame.sections) do
 		local v = state.views[si] or {}
-		local hidden = (si == 3 and Cfg("onlyProfit"))
+		local hidden = (si == NOPROFIT and Cfg("onlyProfit"))
 		local collapsed = IsCollapsed(si)
 		local off = state.offsets[si] or 0
 		for j, row in ipairs(sec.rows) do
@@ -491,7 +533,6 @@ function UI.Refresh()
 			range = string.format(L["  |cff9d9d9d%d–%d de %d (role com o mouse)|r"], off + 1, math.min(off + sec.cfg.rows, #v), #v)
 		end
 		local extra = ""
-		if si == 1 then extra = string.format(L[" · a partir de %s vendas/dia"], tostring(Cfg("volumeMinSpd") or 10)) end
 		if si == TRANSMUTE and #v > 0 then
 			-- cargas: o limite do dia. Melhor uso da carga = a de maior lucro esperado
 			local cur, max, nextIn
@@ -916,6 +957,39 @@ local function Create()
 	end)
 	frame.onlyProfit = cb
 
+	-- Abas da lista (no estilo da barra de listas do Mercado > Comprar): Concentração x Sem concentração
+	frame.listBar = CreateFrame("Frame", nil, frame)
+	frame.listBar:SetPoint("TOPLEFT", 12, -80)
+	frame.listBar:SetPoint("TOPRIGHT", -12, -80)
+	frame.listBar:SetHeight(26)
+	local barBg = frame.listBar:CreateTexture(nil, "BACKGROUND")
+	barBg:SetAllPoints()
+	barBg:SetColorTexture(0.08, 0.13, 0.24, 0.9)
+	frame.listTabs = {}
+	for i, li in ipairs(RECIPE_LISTS) do
+		local b = CreateFrame("Button", nil, frame.listBar)
+		b:SetHeight(22)
+		b.key = li.key
+		b.bg = b:CreateTexture(nil, "ARTWORK")
+		b.bg:SetAllPoints()
+		b.edge = b:CreateTexture(nil, "BORDER")
+		b.edge:SetPoint("TOPLEFT", -2, 2); b.edge:SetPoint("BOTTOMRIGHT", 2, -2)
+		b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		b.text:SetAllPoints()
+		b.text:SetJustifyH("CENTER")
+		b:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+		b:SetScript("OnClick", function(self) UI.SetRecipeList(self.key) end)
+		b:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:SetText(L[li.label])
+			GameTooltip:AddLine(self.key == "conc" and L["Só os resultados que gastam concentração (a qualidade de cima)."]
+				or L["Só os resultados que não gastam concentração (craft normal, reagentes superiores, revenda de NPC)."], 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+		b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		frame.listTabs[i] = b
+	end
+
 	-- Cabeçalhos (arrastáveis; botão direito = mostrar/ocultar)
 	frame.headers = {}
 	frame.headerByKey = {}
@@ -958,7 +1032,7 @@ local function Create()
 
 	-- Linhas
 	local list = CreateFrame("Frame", nil, frame)
-	list:SetPoint("TOPLEFT", 12, -102)
+	list:SetPoint("TOPLEFT", 12, -132)
 	list:SetSize(WIDTH - 24, TOTAL_ROWS * ROW_H)
 	frame.list = list
 
@@ -1051,7 +1125,7 @@ local function Create()
 	frame.status:SetJustifyH("LEFT")
 
 	-- elementos que só aparecem na aba Receitas
-	frame.recipeWidgets = { prev, nextB, frame.profLabel, scan, cb, list, frame.status }
+	frame.recipeWidgets = { prev, nextB, frame.profLabel, scan, cb, list, frame.status, frame.listBar }
 	for _, h in ipairs(frame.headers) do table.insert(frame.recipeWidgets, h) end
 
 	-- painel com rolagem para as abas de texto (Plano de concentração / Investimento)
@@ -1328,7 +1402,7 @@ ns.root.ApplyCraftSize = function() if frame then UI.ApplyTabSize(frame.currentT
 -- Grupo minimizado (ou oculto) = só o título; grupo com menos receitas que a sua parte cede o resto aos outros.
 function UI.LayoutRows()
 	if not frame then return end
-	local slots = math.max(9, math.floor((frame:GetHeight() - 128) / ROW_H) - #SECTIONS)
+	local slots = math.max(9, math.floor((frame:GetHeight() - 158) / ROW_H) - #SECTIONS)
 	local counts, active = {}, {}
 	for si = 1, #frame.sections do
 		counts[si] = 0
@@ -1415,6 +1489,16 @@ function UI.Layout()
 	if (frame.currentTab or 1) == TAB.LIST and frame:GetWidth() < required - 0.5 then
 		UI.ApplyTabSize(TAB.LIST)
 	end
+	-- abas da lista: dividem a largura da barra em partes iguais
+	if frame.listTabs then
+		local n = #frame.listTabs
+		local bw = math.max(80, math.floor((frame.listBar:GetWidth() - 8 * (n + 1)) / n))
+		for i, b in ipairs(frame.listTabs) do
+			b:ClearAllPoints()
+			b:SetPoint("LEFT", frame.listBar, "LEFT", 8 + (i - 1) * (bw + 8), 0)
+			b:SetWidth(bw)
+		end
+	end
 	local width = math.max(frame:GetWidth(), required)
 	local extra = math.max(0, width - required)
 	local shown = {}
@@ -1425,7 +1509,7 @@ function UI.Layout()
 		local h = frame.headerByKey[col.key]
 		h:SetWidth(cw)
 		h:ClearAllPoints()
-		h:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -82)
+		h:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -112)
 		h:SetShown((frame.currentTab or 1) == 1)
 		h.x = x
 		for _, row in ipairs(frame.rows) do

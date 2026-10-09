@@ -270,8 +270,8 @@ local function Create(parent)
 	Edit(XL, y, L["Classe B até (% acumulado):"], 50, "abcB", "percent", false, L["Padrão 95%."]); y = y - 26
 	Edit(XL, y, L["Pouca venda abaixo de (vendas/dia):"], 50, "minSoldPerDay", "number", true,
 		L["Itens abaixo disso ganham o ! laranja e a "] .. ns.QIcon(2) .. L[" não entra nas recomendações."]); y = y - 26
-	Edit(XL, y, L["Seção Volume a partir de (vendas/dia):"], 50, "volumeMinSpd", "number", false,
-		L["Receita lucrativa que vende pelo menos isto por dia na região vai para a seção Volume;\nabaixo disso vai para Baixo volume, alto lucro."]); y = y - 26
+	Edit(XL, y, L["Bom volume a partir de (vendas/dia):"], 50, "volumeMinSpd", "number", false,
+		L["Âncora da cor da coluna Vendas/dia: abaixo disso fica laranja, daí para cima amarelo, lima e verde."]); y = y - 26
 	Check(XL, y, L["Ignorar itens de coleta no % de vendas e na curva ABC"], "excludeGathered", false,
 		L["Itens que também se obtêm por coleta (ex.: motes das transmutações) não entram no % de vendas nem na curva ABC.\nCtrl+clique numa receita marca/desmarca manualmente."]); y = y - 26
 	local yLeft = y

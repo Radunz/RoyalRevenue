@@ -1316,5 +1316,13 @@ local T = {
 	["%.1f%% da profissão"] = "%.1f%% of the profession",
 	["A curva ABC classifica pelo melhor uso da concentração (ouro por ponto)"] = "The ABC curve ranks by the best use of concentration (gold per point)",
 	["Sem lucro ou sem giro: fora da curva ABC"] = "No profit or no turnover: outside the ABC curve",
+	["Com lucro"] = "Profitable",
+	["dá lucro agora"] = "profits right now",
+	["Concentração"] = "Concentration",
+	["Sem concentração"] = "No concentration",
+	["Só os resultados que gastam concentração (a qualidade de cima)."] = "Only outcomes that spend concentration (the higher quality).",
+	["Só os resultados que não gastam concentração (craft normal, reagentes superiores, revenda de NPC)."] = "Only outcomes that don't spend concentration (normal craft, better reagents, NPC resale).",
+	["Bom volume a partir de (vendas/dia):"] = "Good volume from (sales/day):",
+	["Âncora da cor da coluna Vendas/dia: abaixo disso fica laranja, daí para cima amarelo, lima e verde."] = "Anchor for the Sales/day column color: below it is orange, then yellow, lime and green.",
 }
 for k, v in pairs(T) do L[k] = v end
