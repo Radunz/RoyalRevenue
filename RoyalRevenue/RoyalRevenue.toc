@@ -1,0 +1,54 @@
+## Interface: 120100, 120007, 120005
+## Title: |cffd4af37Royal|r |cff6f9be0Revenue|r
+## Notes: Lucro de craft (receitas, concentração, compras, vendas, fila, investimento) + livro-caixa de cada atividade. Cores da Pomerânia, da família Radünz.
+## Author: Rafael Radünz
+## Version: 1.25.1
+## SavedVariables: LucroCraftDB, LucroLivroDB, RoyalRevenueDB
+## LoadSavedVariablesFirst: 1
+## OptionalDeps: TradeSkillMaster, Auctionator, CraftSim
+## Category: Professions
+## IconTexture: Interface\AddOns\RoyalRevenue\Media\icon
+## AddonCompartmentFunc: RoyalRevenue_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: RoyalRevenue_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: RoyalRevenue_OnAddonCompartmentLeave
+
+Brand.lua
+
+# módulo Craft (lucro de craft)
+Craft\Locale.lua
+Craft\Pricing.lua
+Craft\Containers.lua
+Craft\Own.lua
+Craft\Visual.lua
+Craft\Stock.lua
+Craft\Scanner.lua
+Craft\UI.lua
+Craft\Plan.lua
+Craft\Buy.lua
+Craft\Consum.lua
+Craft\Sell.lua
+Craft\RecipeShop.lua
+Craft\Queue.lua
+Craft\Sales.lua
+Craft\Gather.lua
+Craft\Invest.lua
+Craft\InvestView.lua
+Craft\SecondProf.lua
+Craft\Salvage.lua
+Craft\Settings.lua
+Craft\Alerts.lua
+Craft\Core.lua
+
+# módulo Livro (livro-caixa)
+Livro\Locale.lua
+Livro\Price.lua
+Livro\Canvas.lua
+Livro\Reclass.lua
+Livro\Ledger.lua
+Livro\Sales.lua
+Livro\UI.lua
+Livro\Minimap.lua
+Livro\Options.lua
+Livro\Core.lua
+
+Shell.lua
