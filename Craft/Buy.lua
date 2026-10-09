@@ -1061,16 +1061,27 @@ function Buy.Render(cv)
 			px = px + 28
 		end
 		if g.sugg then
-			lc:Text(px + 90, y + 9, string.format(L["|cff9d9d9dmelhor de cada tipo · %.1f h e %d chefes em masmorra/raide/imersão (14 dias)|r"], g.hours or 0, g.runs or 0), GameFontHighlightSmall, X_COST - px - 210)
-			-- qualidade das sugestões (quando o consumível tiver 2): troca para todos os personagens
+			lc:Text(px + 90, y + 9, string.format(L["|cff9d9d9dmelhor de cada tipo · %.1f h e %d chefes em masmorra/raide/imersão (14 dias)|r"], g.hours or 0, g.runs or 0), GameFontHighlightSmall, X_COST - px - 140)
+			-- qualidade das sugestões (quando o consumível tiver 2): troca para todos os personagens; só o ícone, clique abre o menu
 			if ns.Consum then
-				local qn = ns.Consum.Quality()
-				local qx = X_COST - 160
-				lc:Box(qx, y + 5, 90, 20, 0.17, 0.36, 0.66, 0.35)
-				lc:Text(qx, y + 8, string.format(L["Qualidade: %d"], qn), GameFontHighlightSmall, 90, "CENTER")
-				lc:Hit(qx, y + 5, 90, 20, function() ns.Consum.SetQuality(qn == 1 and 2 or 1) end, function(tt)
+				local qx = X_COST - 90
+				lc:Text(qx, y + 4, ns.QIcon(ns.Consum.Quality(), 2, 20), GameFontNormal, 24, "CENTER")
+				lc:Hit(qx, y + 3, 24, 22, function(btn)
+					if MenuUtil and MenuUtil.CreateContextMenu then
+						MenuUtil.CreateContextMenu(btn, function(_, root)
+							root:CreateTitle(L["Qualidade das sugestões"])
+							for i = 1, 2 do
+								root:CreateRadio(ns.QIcon(i, 2, 14) .. " " .. string.format(L["Qualidade %d"], i),
+									function() return ns.Consum.Quality() == i end,
+									function() ns.Consum.SetQuality(i) end)
+							end
+						end)
+					else
+						ns.Consum.SetQuality(ns.Consum.Quality() == 1 and 2 or 1)
+					end
+				end, function(tt)
 					tt:SetText(L["Qualidade das sugestões"])
-					tt:AddLine(L["Clique para trocar entre as duas qualidades, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."], 1, 1, 1, true)
+					tt:AddLine(L["Clique: escolher, nos consumíveis que tiverem (ex.: poção de vida, de mana, comida, óleo de arma)."], 1, 1, 1, true)
 				end)
 			end
 		elseif g.cons then
