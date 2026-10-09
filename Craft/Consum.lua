@@ -240,11 +240,15 @@ function Consum.Groups(me, allChars, usedGroups)
 			local skip = false
 			for _, x in ipairs(s.ids) do if inUsed[char] and inUsed[char][x] then skip = true end end
 			if id and not skip then
-				local own = C.own(char, id)
-				local wb = C.warband(id)
-				local m = { key = id, ids = { id }, buyId = id, need = s.need, uses = {}, own = own, wb = math.min(wb, math.max(0, s.need - own)),
+				-- tem/precisa somado entre as qualidades (uma vale pela outra); comprar é uma OU outra, não as duas
+				local own = 0
+				for _, x in ipairs(s.ids) do own = own + C.own(char, x) end
+				local wb = 0
+				for _, x in ipairs(s.ids) do wb = wb + C.warband(x) end
+				local m = { key = id, ids = s.ids, buyId = id, need = s.need, uses = {}, own = own, wb = math.min(wb, math.max(0, s.need - own)),
 					alts = 0, queue = true, note = s.note, why = s.why }
 				m.buy = math.max(0, s.need - own - m.wb)
+				if #s.ids > 1 then m.variants = s.ids end
 				table.insert(g.order, m)
 			end
 		end

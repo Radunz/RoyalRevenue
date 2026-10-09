@@ -570,3 +570,10 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - a.outlier: agora > 2,5x o típico → selo ESPERE, preço em laranja + "anúncio fora do normal" e o típico; tooltip explica. Custo da linha = custo de fabricar se FABRIQUE, senão o típico (com anúncio absurdo) ou o agora. Economia de fabricar comparada com esse preço de referência e mostrada no máx. "-99%".
 - Nome de item ainda não carregado ("item 274781"): V.ItemName pede ao servidor e redesenha a aba quando chega (como os ícones). Usado em Comprar, Fila, Plano, Vender e Receitas.
 - Teste: t93.lua (14 dias a 20g com 3 dias de 11.111g e agora 11.111g → típico 20g, fora do normal, ESPERE, dias entre −21% e +93%). t2 (terça −10% / sábado +8%) continua igual.
+
+## v1.26.0 — Consumíveis: as duas qualidades na mesma linha (pedido do Rafael)
+- Causa: `Consum.Pick` escolhe a melhor qualidade comparando `GetItemCraftedQualityByItemInfo`, mas os consumíveis com 2 IDs (poção de vida, de mana, comida, óleo de arma, Emergency Soul Link, banquete) não são itens de qualidade fabricada — a API sempre devolve 0 para os dois, então o "maior" nunca vence e a função ficava sempre com `ids[1]` (a 1ª qualidade).
+- Consum.lua (`Groups`): "tem" e "precisa" passam a somar as duas qualidades (uma vale pela outra); `m.ids` leva as duas (antes só a escolhida) e `m.variants` marca a linha para a UI.
+- Buy.lua (`Build`): com `m.variants`, calcula preço, selo e custo de fabricar de cada qualidade separadamente (`m.vdata`), com a mesma quantidade a comprar (é uma OU outra, não as duas somadas).
+- Buy.lua (`Render`): linha com `m.vdata` mostra as duas opções lado a lado (ícone, nome, preço agora com aviso de fabricar mais barato, botão de comprar cada uma) em vez da coluna única de preço/selo/dias/custo.
+- Teste: conferido com o SavedVariables real (sv11) — poção de vida (271883/271884) aparece com preços bem diferentes (130.000c vs 1.337.800c) e a aba desenha sem erro; comida (242747/242275) com uma das qualidades sem preço também desenha sem erro.
