@@ -701,3 +701,11 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - **`FinalizeUnknown` não limpava `r.mixAbcShare`** (v1.30.0), diferente dos outros campos da curva.
 - Procurei mais casos do `a and b or c` que já tinha mordido duas vezes na v1.31.1: os que sobraram no código novo são seguros (o termo do meio nunca é falso).
 - Conferido que o resultado não mudou: t94 e t97 com os mesmos números de antes, e a suíte inteira igual.
+
+## v1.32.0 — custo de concentração de uma qualidade com o custo de outra (print do Rafael, Devouring Banding)
+- Print: a receita mostrava **concentração 180** e o jogo pedia **379**. A auditoria que o addon já grava (`/lucro audit`) entregou a causa: `enviado p/ API: slot 1: 1x 244636`, mas o reagente guardado na receita era o `244635`.
+- Causa: no scan, a qualidade mais barata NA AH do Sin'dorei Armor Banding era a **q2** (69,16g), então a API calculou a operação com ela — perícia 440, concentração 180. Logo depois, o `ApplyCraftedReagents` viu que **fabricar a q1** sai por 63,30g e trocou o reagente — mas perícia, qualidade de saída e concentração **não eram recalculadas**. A receita ficava com o custo de uma qualidade e a concentração de outra.
+- `RefreshOps` (novo, roda no `Finalize` logo depois do `ApplyCraftedReagents`): para as receitas em que a troca mudou a QUALIDADE (`r.opDirty`), refaz a operação e atualiza perícia, atributos, qualidade de saída, item de saída, custo de concentração e devolução da engenhosidade. A API só responde pela profissão aberta; nos outros personagens a troca é **desfeita** (volta para a qualidade da AH, com o custo dela), que é melhor do que misturar as duas.
+- A receita passou a guardar `qIDs` (item de saída por qualidade), que o `RefreshOps` precisa quando a qualidade muda.
+- Troca de reagente que **não** muda a qualidade (fabricar a mesma qualidade mais barato) continua como era, sem recalcular nada.
+- Teste: t100.lua — reproduz a Devouring Banding com a q2 escolhida pela AH e a q1 mais barata de fabricar: com a profissão aberta vira reagente q1 + perícia 240 + concentração **379** (igual ao jogo); sem a API volta para q2 + 440 + 180 (consistente); e a troca de mesma qualidade não marca recálculo.

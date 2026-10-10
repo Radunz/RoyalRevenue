@@ -757,6 +757,9 @@ local function ApplyCraftedReagents(rows, map)
 				p.unit, p.itemID, changed = bestUnit, bestItem, true
 				usedCraft = true
 				p.crafted = string.format("%s (%s)", src.name or "?", src.char or "?")
+				-- trocar por uma QUALIDADE diferente muda perícia, qualidade de saída e
+				-- concentração, que foram calculadas no scan com p.buyItem: marca para refazer
+				if bestItem ~= p.buyItem then r.opDirty = true end
 			else
 				p.unit, p.itemID = (p.bound and p.boundCost) or p.buyUnit, p.buyItem
 			end
@@ -851,6 +854,53 @@ local function ApplyStock(rows)
 	end
 end
 
+-- O ApplyCraftedReagents pode trocar o reagente por uma QUALIDADE diferente (quando fabricar
+-- aquela sai mais barato que comprar a que o scan escolheu). Isso muda a perícia, a qualidade de
+-- saída e o custo de concentração, que tinham sido calculados com a qualidade da AH — e sem
+-- refazer a conta a receita ficava com o custo de uma qualidade e a concentração de outra
+-- (ex.: Devouring Banding com custo da q1 e concentração 180, da q2, quando o jogo pedia 379).
+-- Aqui a operação é recalculada para quem trocou. A API só responde pela profissão aberta;
+-- para os outros personagens a troca é desfeita, que é melhor do que misturar as duas.
+local function RefreshOps(rows)
+	for _, r in ipairs(rows) do
+		if r.opDirty then
+			r.opDirty = nil
+			local audit = r.audit or {}
+			local op = (C_TradeSkillUI and C_TradeSkillUI.GetCraftingOperationInfo)
+				and GetOperationInfo(r.recipeID, r.parts, audit) or nil
+			if op and op.craftingQuality then
+				local maxQ = r.maxQuality or 0
+				r.skill = OpSkill(op)
+				r.stats = ReadStats(op)
+				local forced = tonumber(Cfg("outputQuality"))
+				local baseQ = forced or op.craftingQuality or 1
+				if maxQ > 0 then baseQ = math.min(math.max(math.floor(baseQ), 1), maxQ) end
+				r.quality = (maxQ > 0) and baseQ or r.quality
+				if r.qIDs and r.quality then r.itemID = r.qIDs[r.quality] or r.itemID end
+				r.concCost, r.concQuality, r.concItemID = nil, nil, nil
+				if maxQ > 0 and baseQ < maxQ and op.concentrationCost and op.concentrationCost > 0 then
+					r.concCost = op.concentrationCost
+					r.concQuality = baseQ + 1
+					r.concItemID = (r.qIDs and r.qIDs[r.concQuality]) or r.itemID
+				end
+				r.ingRefund = op.ingenuityRefund or r.ingRefund
+			else
+				-- sem como recalcular: volta para a qualidade com que a operação foi feita
+				local total = 0
+				for _, p in ipairs(r.parts or {}) do
+					if p.buyItem and p.itemID ~= p.buyItem then
+						p.itemID, p.unit, p.crafted = p.buyItem, p.buyUnit, nil
+					end
+					if p.unit then total = total + p.unit * p.qty end
+				end
+				if total > 0 then r.cost = total end
+			end
+		end
+	end
+end
+
+Scanner.RefreshOps = RefreshOps
+
 -- Custo final (fabricar x comprar, estoque), lucro e curva ABC
 function Scanner.Finalize(rows, charKey)
 	Scanner._finalChar = charKey
@@ -860,6 +910,7 @@ function Scanner.Finalize(rows, charKey)
 	-- 2ª passada: usa o custo de fabricar reagentes quando for mais barato que comprar
 	local craftMap = BuildCraftMap(rows, charKey)
 	ApplyCraftedReagents(rows, craftMap)
+	RefreshOps(rows)
 	ApplyStock(rows)
 	for _, r in ipairs(rows) do ComputeProfit(r) end
 	ApplyABC(rows)
@@ -1116,6 +1167,8 @@ local function CollectRows(targetID, unknown)
 						itemID = itemID,
 						quality = baseQ,
 						maxQuality = maxQ > 0 and maxQ or nil,
+						-- item de saída por qualidade: o RefreshOps precisa quando a qualidade muda
+						qIDs = hasQIDs and qIDs or nil,
 						gearQ = gearQ or nil,
 						saleLink = OutLinkAt(baseQ),
 						qty = qty,
