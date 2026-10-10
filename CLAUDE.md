@@ -142,6 +142,20 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 - Perfil de desempenho: `lua5.1 prof.lua` (tempo de cada aba), `lua5.1 -e 'TARGET=9' prof2.lua` (perfil inclusivo de uma aba do Craft), `lua5.1 -e 'MODE="livro"; TAB=5' prof3.lua`.
 - **As fixtures são o SavedVariables real da conta do Rafael** (personagens, ouro, transações). Não publicar o repositório.
 
+## Diagnosticar número errado numa receita (o caminho mais rápido)
+O SavedVariables **já traz o rastro do cálculo** — na maioria das vezes não precisa pedir nada no jogo.
+Ler direto o arquivo (`_retail_\WTF\Account\REDSHARKBR\SavedVariables\RoyalRevenue.lua`) com `lua5.1`
+(caminho no formato do Windows, `[[C:\...]]`, que o Lua for Windows entende):
+- `r.audit` de cada receita: `opMode`, `opError`, **`reagentsSent`** (exatamente o que foi mandado para a
+  API: `slot N: Qx ID`) e `formula` (custo, itens esperados, venda, lucro, stats e o bloco de concentração).
+  Foi `reagentsSent` que resolveu a v1.32.0: dizia `1x 244636` enquanto a receita guardava `244635`.
+- Comparar `r.skill` / `r.concCost` / `r.quality` com o painel do jogo (ou do CraftSim) aponta se a
+  divergência é da operação (perícia) ou só da exibição.
+- `r.parts[i]`: `itemID` (qualidade escolhida), `buyItem` (a que a AH escolheu no scan), `unit`
+  (valor fracionário = custo de FABRICAR, não preço de AH) e `slot`.
+- `LucroCraftDB.ordersDebug`: cópia crua dos pedidos lidos (5 níveis), com `minQuality`, `reagents` e
+  `npcOrderRewards`. Recompensa em moeda vem como `{ count, currencyType }`, **sem** `itemLink`.
+
 ## Lançar uma versão (o fluxo de sempre)
 1. Subir `## Version:` no `RoyalRevenue/RoyalRevenue.toc` (patch = correção, minor = funcionalidade).
 2. Rodar `./tools/check.sh` e os testes, e explicar o diff.
