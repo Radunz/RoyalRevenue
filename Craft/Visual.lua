@@ -205,13 +205,14 @@ function Canvas:Icon(x, y, size, texture, o)
 	end)
 	b:SetPoint("TOPLEFT", self.child, "TOPLEFT", x, -y)
 	b:SetSize(size, size)
-	-- atlas (ex.: ícone de conhecimento da profissão) em vez de arquivo de textura
+	-- atlas (ex.: ícone de primeira fabricação) em vez de arquivo de textura.
+	-- O SetAtlas já define as coordenadas da região dele: mexer no TexCoord depois mostraria
+	-- a folha inteira. O recorte de borda (0.07..0.93) é só para ícone de item.
 	if o.atlas and b.tex.SetAtlas then
 		b.tex:SetAtlas(o.atlas)
-		b.tex:SetTexCoord(0, 1, 0, 1)
 	else
-		b.tex:SetTexture(texture or 134400)
 		b.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		b.tex:SetTexture(texture or 134400)
 	end
 	b.tex:SetDesaturated(o.desaturate and true or false)
 	local br, bg, bb = 0.5, 0.5, 0.5

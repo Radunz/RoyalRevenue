@@ -378,19 +378,30 @@ function ns.IsTransmute(r)
 	return v
 end
 
-function ns.ExcludedFromShare(r)
-	return Cfg("excludeGathered") and ns.IsGathered(r) or false
-end
+-- (o ApplyABC lê a configuração uma vez e chama ns.IsGathered direto, para não reler por linha)
 
 -- item vinculado (ao pegar ou ao bando/conta) nunca vai para a casa de leilões, então não entra
 -- na curva ABC nem no % de vendas, mesmo com giro (ex.: visão/estatística, item de missão).
+-- O vínculo NÃO muda, então o resultado fica em cache para sempre: o ApplyABC roda em todo
+-- Finalize (reprice do login, depois do scan da AH) e o GetItemInfo é das APIs mais caras.
+-- Item ainda não carregado devolve nil: nesse caso não guarda, para reavaliar quando chegar.
 local BIND_BOP = { [1] = true, [4] = true }
 local BIND_WARBAND = { [7] = true, [8] = true, [9] = true }
+local aucCache, aucPending = {}, {}
 function ns.IsAuctionable(itemID)
 	if not itemID then return true end
+	local c = aucCache[itemID]
+	if c ~= nil then return c end
+	-- item não carregado não entra no cache (para reavaliar quando chegar), mas também não pode
+	-- ser perguntado a cada Finalize: espera 30 s antes de tentar de novo
+	local p = aucPending[itemID]
+	if p and time() - p < 30 then return true end
 	local bind = select(14, C_Item.GetItemInfo(itemID))
-	if not bind then return true end -- item ainda não carregado: não exclui por engano
-	return not (BIND_BOP[bind] or BIND_WARBAND[bind])
+	if not bind then aucPending[itemID] = time(); return true end
+	aucPending[itemID] = nil
+	local v = not (BIND_BOP[bind] or BIND_WARBAND[bind])
+	aucCache[itemID] = v
+	return v
 end
 
 -- ===== Curva ABC: melhor uso da concentração =====
@@ -414,10 +425,11 @@ end
 local function ApplyABC(rows)
 	local conc, noconc, total, nTotal, spdTotal = {}, {}, 0, 0, 0
 	local minSpd = tonumber(Cfg("minSoldPerDay")) or 1
+	local exclGathered = Cfg("excludeGathered") and true or false   -- fora do loop: é a mesma para todas
 	for _, r in ipairs(rows) do
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
 		r.concAbc, r.concAbcShare, r.mixAbc, r.mixAbcShare = nil, nil, nil, nil
-		r.gathered = ns.ExcludedFromShare(r) or nil
+		r.gathered = (exclGathered and ns.IsGathered(r)) or nil
 		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
 		-- sem concItemID, a concentração sai no MESMO item: o vínculo é o do item base
 		local concItem = r.concItemID or r.itemID
@@ -867,7 +879,7 @@ function Scanner.FinalizeUnknown(unknownRows, knownRows, charKey)
 	for _, r in ipairs(unknownRows) do
 		ComputeProfit(r)
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
-		r.concAbc, r.concAbcShare, r.mixAbc = nil, nil, nil
+		r.concAbc, r.concAbcShare, r.mixAbc, r.mixAbcShare = nil, nil, nil, nil
 	end
 end
 

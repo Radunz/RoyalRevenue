@@ -692,3 +692,12 @@ Medido no harness com o SavedVariables real (sv11, 9 MB), base v1.24.7 → v1.25
 - `OrderConc` passa a receita (`c.row`) para o `OrderPlan` usar nessa reserva.
 - Snapshot de diagnóstico (`LucroCraftDB.ordersDebug`): copiava só 3 níveis e truncava o resto em `"{...}"` — o itemID do reagente do cliente fica em `reagents[i].reagentInfo.reagents[j].itemID` e ficava escondido, o que atrapalhou este diagnóstico. Agora copia até 5 níveis.
 - Teste: t99.lua — os 4 casos (API responde e falta qualidade → obrigatória; API responde e já alcança → opcional; **API não responde e minQ 2 → obrigatória, estimada**; API não responde e minQ 1 → opcional).
+
+## v1.31.5 — revisão e otimização do que entrou da v1.26 à v1.31 (pedido do Rafael)
+Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes novas. O que foi encontrado:
+- **`ns.IsAuctionable` sem cache** (v1.26.3): chamava `C_Item.GetItemInfo` até 2× por receita, e o `ApplyABC` roda em todo `Finalize` — reprecificação do login (todos os personagens) e depois de cada scan da AH. Com ~935 receitas salvas, eram ~1.800 chamadas de uma das APIs mais caras do jogo, por passada. O tipo de vínculo **nunca muda**, então agora fica em cache para sempre. Item ainda não carregado (a API devolve nil) não entra no cache, mas só é perguntado de novo depois de 30 s, em vez de a cada `Finalize`.
+- **`ExcludedFromShare` lia a configuração por linha** dentro do loop do `ApplyABC`. A leitura saiu para fora do loop (é a mesma para todas as receitas) e a função, que só tinha esse uso, saiu.
+- **`Canvas:Icon` quebrava atlas** (v1.31.0): o `SetTexCoord` era chamado DEPOIS do `SetAtlas`, sobrescrevendo as coordenadas da região do atlas — funcionava por acaso porque o `Professions_Icon_FirstTimeCraft` ocupa a textura inteira, mas qualquer atlas que seja um recorte apareceria errado. Agora o recorte de borda (0,07..0,93) só se aplica a ícone de item.
+- **`FinalizeUnknown` não limpava `r.mixAbcShare`** (v1.30.0), diferente dos outros campos da curva.
+- Procurei mais casos do `a and b or c` que já tinha mordido duas vezes na v1.31.1: os que sobraram no código novo são seguros (o termo do meio nunca é falso).
+- Conferido que o resultado não mudou: t94 e t97 com os mesmos números de antes, e a suíte inteira igual.
