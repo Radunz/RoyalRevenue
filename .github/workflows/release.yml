@@ -1,8 +1,9 @@
 name: Release addon
 
-# Dispara ao empurrar uma tag "vX.Y.Z" (ex.: git tag v1.25.1 && git push origin v1.25.1).
-# Usa o BigWigs Packager (padrão da comunidade WoW): ele lê RoyalRevenue/RoyalRevenue.toc,
-# zipa só a pasta do addon e envia pro CurseForge + cria a release no GitHub (pro WowUp).
+# Dispara ao empurrar uma tag "vX.Y.Z" (ex.: git tag v1.31.4 && git push origin v1.31.4).
+# Usa o BigWigs Packager (padrão da comunidade WoW): ele lê RoyalRevenue.toc, zipa só a pasta
+# do addon e envia pro CurseForge. A release do GitHub é criada no passo seguinte (é o caminho
+# que o WowUp usa; o upload do próprio packager não estava criando a release).
 on:
   push:
     tags:
@@ -20,8 +21,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Package and release
+      - name: Package and upload to CurseForge
         uses: BigWigsMods/packager@v2
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # O WowUp lê o release.json para saber para qual versão do jogo o zip serve.
+      # "mainline" = retail; a interface sai do próprio .toc (primeiro valor da lista).
+      - name: Build release.json
+        id: relinfo
+        run: |
+          set -euo pipefail
+          zip=$(ls .release/*.zip | head -n1)
+          name=$(basename "$zip")
+          iface=$(grep -m1 '^## Interface:' RoyalRevenue.toc | sed 's/.*: *//' | cut -d, -f1 | tr -d ' \r')
+          printf '{"releases":[{"filename":"%s","nolib":false,"metadata":[{"flavor":"mainline","interface":%s}]}]}\n' \
+            "$name" "$iface" > .release/release.json
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "Zip: $name · Interface: $iface"
+          cat .release/release.json
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.relinfo.outputs.zip }}
+            .release/release.json
+          generate_release_notes: true
