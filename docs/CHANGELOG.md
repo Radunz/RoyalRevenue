@@ -716,3 +716,10 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - O filtro agora usa o `ns.IsAuctionable` (o mesmo teste de tipo de vínculo da v1.26.3, que já tira esses itens da curva ABC): vinculado ao pegar (1/4) e vinculado ao bando/conta (7/8/9) não aparecem mais na aba Vender.
 - `Sell.Post` ganhou mensagens separadas: as três falhas possíveis (item vinculado, item não encontrado na bolsa, sem preço) davam todas o mesmo "item não encontrado na bolsa (atualize a aba)", que não ajudava a entender o que estava errado.
 - Teste: t101.lua — bolsa com poção, equipamento normal, equipamento vinculado ao bando e equipamento já vinculado: entram só os dois primeiros.
+
+## v1.33.0 — Receitas: coluna Lucro/ouro e colunas de concentração só na aba delas (pedido do Rafael)
+- Coluna nova **Lucro/ouro** na aba Sem concentração: o ouro de lucro para cada 1 de ouro gasto em material, que é o par do **Lucro/conc** da outra aba e a métrica que ordena a curva ABC daquela aba (v1.30.0). É a mesma razão da coluna Margem, em ouro em vez de porcentagem (94% → 0,94o). `UI.PerGold` devolve em cobre (razão × 10.000), senão o `FormatGold` mostraria "0,00o" para tudo.
+- As colunas **Conc** e **Lucro/conc** passam a aparecer só na aba Concentração, e a Lucro/ouro só na aba Sem concentração: cada coluna ganhou um campo `tab` e o `VisibleColumns` filtra por ele, junto com o mostrar/ocultar que já existia no menu do botão direito.
+- `UI.SetRecipeList` passou a refazer o layout além do refresh — as colunas mudam com a aba, e sem isso os cabeçalhos ficavam na posição da aba anterior.
+- Coluna nova entra sozinha na ordem salva (o `ColCfg` já cuidava disso), logo depois da Lucro/conc; dá para mover e ocultar como as outras, e ordenar clicando no título.
+- Teste: t102.lua — colunas certas em cada aba, o valor batendo com a margem (94% → 0,94o) e a ordenação pela coluna nova.

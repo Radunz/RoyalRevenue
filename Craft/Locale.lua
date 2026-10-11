@@ -1328,6 +1328,7 @@ local T = {
 	["Itens de recompensa"] = "Reward items",
 	["Conhecimento da profissão"] = "Profession knowledge",
 	["Primeira fabricação"] = "First craft",
+	["Lucro/ouro"] = "Profit/gold",
 	["este item é vinculado (ou vinculado ao bando): não pode ser anunciado na casa de leilões."] = "this item is bound (or warbound): it cannot be listed on the auction house.",
 	["sem preço para este item: não dá para sugerir um valor de anúncio."] = "no price for this item: cannot suggest a listing value.",
 	["Quantidade"] = "Quantity",

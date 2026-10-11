@@ -86,8 +86,10 @@ local COLUMNS = {
 	{ key = "mySpd",  label = L["Minhas/dia"], width = 64, align = "RIGHT", defaultHidden = true },
 	{ key = "craftable", label = L["Estoque"], width = 52, align = "RIGHT", defaultHidden = true },
 	{ key = "abc",    label = "ABC",       width = 40,  align = "CENTER" },
-	{ key = "concCost",   label = "Conc",          width = 44, align = "RIGHT" },
-	{ key = "perConc",    label = L["Lucro/conc"],    width = 72, align = "RIGHT" },
+	{ key = "concCost",   label = "Conc",          width = 44, align = "RIGHT", tab = "conc" },
+	{ key = "perConc",    label = L["Lucro/conc"],    width = 72, align = "RIGHT", tab = "conc" },
+	-- par do Lucro/conc na aba sem concentração: ouro de lucro por ouro gasto em material
+	{ key = "perGold",    label = L["Lucro/ouro"],    width = 72, align = "RIGHT", tab = "noconc" },
 }
 
 local COL_BY_KEY = {}
@@ -123,11 +125,15 @@ local function ColCfg()
 	return cc
 end
 
+-- Coluna com "tab" só aparece na aba dela: as de concentração (Conc, Lucro/conc) na aba
+-- Concentração e a Lucro/ouro na aba Sem concentração.
 local function VisibleColumns()
 	local cc = ColCfg()
+	local cur = UI.RecipeList()
 	local list = {}
 	for _, k in ipairs(cc.order) do
-		if not cc.hidden[k] then table.insert(list, COL_BY_KEY[k]) end
+		local col = COL_BY_KEY[k]
+		if col and not cc.hidden[k] and (not col.tab or col.tab == cur) then table.insert(list, col) end
 	end
 	return list
 end
@@ -143,6 +149,7 @@ local state = {
 function UI.SetRecipeList(key)
 	LucroCraftDB.config.recipeList = (key == "noconc") and "noconc" or "conc"
 	state.offset = 0; state.offsets = { 0, 0, 0, 0, 0 }
+	UI.Layout()   -- as colunas mudam com a aba (concentração x Lucro/ouro)
 	UI.Refresh()
 end
 
@@ -173,10 +180,24 @@ local function CurrentEntry()
 	return state.profID and entries[state.profID]
 end
 
+-- Lucro por ouro gasto em material (o par do Lucro/conc na aba sem concentração).
+-- É a mesma razão da coluna Margem, em ouro em vez de porcentagem — e é a métrica que ordena
+-- a curva ABC daquela aba. Calculado na hora porque cada variante tem o seu custo.
+-- Devolve em COBRE (razão × 10.000) para o FormatGold mostrar "0,94o" = 0,94 de ouro de lucro
+-- para cada 1 de ouro investido; sem isso a razão (0,94) sairia como "0,00o".
+function UI.PerGold(r)
+	local c = r.expCost
+	if type(c) ~= "number" or c <= 0 then return nil end
+	local p = r.profit
+	if type(p) ~= "number" then return nil end
+	return (p / c) * 10000
+end
+
 local function SortValue(r, key)
 	if key == "abc" then
 		return r.abc and ({ A = 3, B = 2, C = 1 })[r.abc] or 0
 	end
+	if key == "perGold" then return UI.PerGold(r) end
 	local v = r[key]
 	if v == false then return nil end
 	return v
@@ -481,6 +502,8 @@ local function FillRow(row, r)
 	else
 		row.cols.perConc:SetText(r.perConc and P.FormatGold(r.perConc, true) or "|cff808080—|r")
 	end
+	local pg = UI.PerGold(r)
+	row.cols.perGold:SetText(pg and P.FormatGold(pg, pg > 0) or "|cff808080—|r")
 	row:Show()
 end
 
