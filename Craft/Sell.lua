@@ -280,7 +280,12 @@ local function BagItems()
 	for bag = 0, last do
 		for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
 			local info = C_Container.GetContainerItemInfo(bag, slot)
-			if info and info.itemID and not info.isBound and (info.quality == nil or info.quality >= 1) then
+			-- isBound só pega o que JÁ está vinculado. Equipamento "vinculado ao bando até equipar"
+			-- (comum no craft de Couraria/Alfaiataria) ainda não está vinculado, mas também não pode
+			-- ir para a casa de leilões — o IsAuctionable olha o tipo de vínculo do item.
+			local vendavel = info and info.itemID and not info.isBound
+				and (not ns.IsAuctionable or ns.IsAuctionable(info.itemID))
+			if vendavel and (info.quality == nil or info.quality >= 1) then
 				local _, _, _, _, _, _, _, maxStack, _, _, _, classID, subclassID, _, xpac = C_Item.GetItemInfo(info.itemID)
 				if classID ~= 12 then   -- 12 = itens de missão
 					local stackable = (maxStack or 1) > 1
@@ -1180,9 +1185,15 @@ end
 local DURATION = 2   -- 1 = 12 h, 2 = 24 h, 3 = 48 h
 function Sell.Post(m)
 	if not Sell.AHOpen() then ns.Print(L["abra a casa de leilões para postar."]) return end
+	-- cada falha com a sua mensagem (antes as três davam "item não encontrado na bolsa")
+	if ns.IsAuctionable and m.id and not ns.IsAuctionable(m.id) then
+		ns.Print(L["este item é vinculado (ou vinculado ao bando): não pode ser anunciado na casa de leilões."])
+		return
+	end
 	local loc = Location(m)
+	if not loc then ns.Print(L["item não encontrado na bolsa (atualize a aba)."]) return end
 	local price = (Sell.SuggestPrice(m))
-	if not loc or not price then ns.Print(L["item não encontrado na bolsa (atualize a aba)."]) return end
+	if not price then ns.Print(L["sem preço para este item: não dá para sugerir um valor de anúncio."]) return end
 	local qty = Sell.PostQty(m)
 	local ok, err
 	if m.gear then

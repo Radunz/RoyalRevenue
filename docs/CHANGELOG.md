@@ -709,3 +709,10 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - A receita passou a guardar `qIDs` (item de saída por qualidade), que o `RefreshOps` precisa quando a qualidade muda.
 - Troca de reagente que **não** muda a qualidade (fabricar a mesma qualidade mais barato) continua como era, sem recalcular nada.
 - Teste: t100.lua — reproduz a Devouring Banding com a q2 escolhida pela AH e a q1 mais barata de fabricar: com a profissão aberta vira reagente q1 + perícia 240 + concentração **379** (igual ao jogo); sem a API volta para q2 + 440 + 180 (consistente); e a troca de mesma qualidade não marca recálculo.
+
+## v1.32.1 — equipamento de craft não postava na AH (relato do Rafael, Couraria)
+- Relato: consumíveis postam normalmente, mas no equipamento fabricado de Couraria o botão Postar não fazia nada.
+- Causa: o filtro da bolsa (`BagItems`) só olhava `info.isBound`, que é **falso** em equipamento "vinculado ao bando até equipar" — comum no craft de Couraria/Alfaiataria no Midnight. O item não está vinculado ainda (dá para mandar pelo banco do bando), então entrava na lista e ganhava botão, mas o jogo **recusa anunciar** na casa de leilões.
+- O filtro agora usa o `ns.IsAuctionable` (o mesmo teste de tipo de vínculo da v1.26.3, que já tira esses itens da curva ABC): vinculado ao pegar (1/4) e vinculado ao bando/conta (7/8/9) não aparecem mais na aba Vender.
+- `Sell.Post` ganhou mensagens separadas: as três falhas possíveis (item vinculado, item não encontrado na bolsa, sem preço) davam todas o mesmo "item não encontrado na bolsa (atualize a aba)", que não ajudava a entender o que estava errado.
+- Teste: t101.lua — bolsa com poção, equipamento normal, equipamento vinculado ao bando e equipamento já vinculado: entram só os dois primeiros.
