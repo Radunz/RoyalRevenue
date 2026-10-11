@@ -1,5 +1,16 @@
 local ADDON, root = ...
-local print = function(...) return root.Out(...) end   -- mensagens vão para a aba de log
+-- Mensagens vão para a aba de log do chat. Com um "sink" ligado elas são recolhidas numa tabela
+-- em vez disso: é assim que a auditoria enche a aba Auditoria sem depender de aba de chat nenhuma.
+local sink = nil
+local print = function(...)
+	if sink then
+		local t = {}
+		for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end
+		sink[#sink + 1] = table.concat(t, " ")
+		return
+	end
+	return root.Out(...)
+end
 root.Craft = root.Craft or {}
 local ns = root.Craft
 ns.root = root
@@ -78,6 +89,19 @@ local function Audit(query)
 	if a.formula then print("  |cff9d9d9d" .. a.formula .. "|r") end
 end
 ns.Audit = Audit
+
+-- Roda a auditoria recolhendo as linhas (ns.auditOut) para a aba Auditoria, em vez de jogá-las
+-- numa aba de chat que o usuário pode nem ter. Com alsoPrint, também manda para o log de sempre.
+function ns.AuditTo(query, alsoPrint)
+	local buf = {}
+	sink = buf
+	local ok, err = pcall(Audit, query)
+	sink = nil
+	if not ok then buf[#buf + 1] = "|cffff5555" .. tostring(err) .. "|r" end
+	ns.auditOut = { query = query, t = time(), lines = buf }
+	if alsoPrint then for _, line in ipairs(buf) do print(line) end end
+	return ns.auditOut
+end
 
 local wantOpen = false      -- só abre sozinho quando a profissão acabou de ser aberta
 local autoOpened = false
@@ -244,7 +268,11 @@ SlashCmdList.LUCROCRAFT = function(msg)
 		cfg.autoOpen = not IsOff(rest)
 		ns.Print(L["abrir junto com a profissão: "] .. (cfg.autoOpen and "on" or "off"))
 	elseif cmd == "audit" or cmd == "auditoria" then
-		Audit(rest)
+		-- enche a aba Auditoria e também manda para o log (quem usa o comando espera o texto)
+		ns.AuditTo(rest, true)
+		if ns.UI and ns.UI.ShowTab and ns.UI.TAB and _G.LucroCraftFrame and _G.LucroCraftFrame:IsShown() then
+			ns.UI.ShowTab(ns.UI.TAB.AUDIT)
+		end
 	elseif cmd == "log" then
 		if rest:lower() == "limpar" or rest:lower() == "clear" then
 			LucroCraftDB.log = {}

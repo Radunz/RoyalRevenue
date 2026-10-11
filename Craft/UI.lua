@@ -11,7 +11,7 @@ ns.UI = UI
 -- a aba Histórico (vendas) foi para o addon LucroLivro (/livro vendas)
 -- (a aba Apostas saiu na v1.0.15: TAB.BETS = nil)
 -- Dois grupos de abas na mesma janela (menu de cima): Craft (1-6) e Mercado (7-8). IDs na ordem visual de cada grupo.
-local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9 }
+local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9, AUDIT = 10 }
 local MARKET = { [7] = true, [8] = true, [9] = true }
 -- Configurações (6) não tem aba: abre pela engrenagem e mantém o grupo atual
 function UI.ModeOf(id)
@@ -191,6 +191,38 @@ function UI.PerGold(r)
 	local p = r.profit
 	if type(p) ~= "number" then return nil end
 	return (p / c) * 10000
+end
+
+-- ===== Aba Auditoria =====
+-- O cálculo completo de uma receita, dentro da janela. Antes isso só saía em texto no chat,
+-- numa aba de log que podia nem existir (ou estar encaixada e nunca ser olhada).
+UI.AuditView = {}
+function UI.AuditView.Render(cv)
+	local W = cv:Width()
+	cv:Begin()
+	local out = ns.auditOut
+	if not out or #(out.lines or {}) == 0 then
+		cv:Text(8, 8, L["Alt+clique numa receita (ou /lucro audit <nome>) para ver aqui o cálculo completo dela."],
+			GameFontHighlight, W - 16)
+		cv:End(40)
+		return
+	end
+	local age = out.t and (time() - out.t) or 0
+	cv:Text(8, 4, string.format(L["|cffd4af37Auditoria|r  |cff9d9d9d%s · há %ds|r"], tostring(out.query or "?"), age),
+		GameFontNormal, W - 120)
+	cv:Button(W - 96, 2, 88, 18, L["Copiar p/ log"], function()
+		for _, line in ipairs(ns.auditOut and ns.auditOut.lines or {}) do ns.root.Out(line) end
+	end, function(tt)
+		tt:SetText(L["Copiar p/ log"])
+		tt:AddLine(L["Manda estas linhas para o chat/aba de log, para dar Ctrl+C."], 1, 1, 1, true)
+	end)
+	local y = 26
+	for i, line in ipairs(out.lines) do
+		root.Zebra(cv, i, 0, y - 1, W, 15)
+		cv:Text(8, y, line, GameFontHighlightSmall, W - 16)
+		y = y + 15
+	end
+	cv:End(y + 8)
 end
 
 local function SortValue(r, key)
@@ -817,7 +849,14 @@ local function OnRowClick(row, button)
 		return
 	end
 	if IsAltKeyDown() then
-		ns.Audit(tostring(r.recipeID))
+		-- a auditoria vai para a aba Auditoria (antes só saía em texto, numa aba de chat
+		-- que podia nem existir) e a janela troca para ela
+		if ns.AuditTo then
+			ns.AuditTo(tostring(r.recipeID))
+			UI.ShowTab(TAB.AUDIT)
+		else
+			ns.Audit(tostring(r.recipeID))
+		end
 		return
 	end
 	if IsControlKeyDown() and IsShiftKeyDown() and r.recipeID then
@@ -1196,7 +1235,8 @@ local function Create()
 
 	-- abas visuais (Plano de concentração e Investimento)
 	frame.canvases = { [TAB.PLAN] = ns.Visual.Create(frame), [TAB.INVEST] = ns.Visual.Create(frame), [TAB.QUEUE] = ns.Visual.Create(frame),
-		[TAB.SALVAGE] = ns.Visual.Create(frame), [TAB.BUY] = ns.Visual.Create(frame), [TAB.SELL] = ns.Visual.Create(frame), [TAB.RECIPES] = ns.Visual.Create(frame) }
+		[TAB.SALVAGE] = ns.Visual.Create(frame), [TAB.BUY] = ns.Visual.Create(frame), [TAB.SELL] = ns.Visual.Create(frame), [TAB.RECIPES] = ns.Visual.Create(frame),
+		[TAB.AUDIT] = ns.Visual.Create(frame) }
 	-- a aba Fila tem a barra de botões em cima
 	-- (a barra de botões da Fila agora fica dentro da aba, em cada parte)
 
@@ -1247,8 +1287,8 @@ local function Create()
 
 	-- abas no rodapé, no estilo da janela de profissão. IDs fixos (1..6); a ordem visual é outra.
 	local TAB_LABELS = { L["Receitas"], L["Plano de concentração"], L["Investimento"], L["Destruir"], L["Fila de craft"],
-		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"] }
-	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9 }
+		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"], L["Auditoria"] }
+	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }
 	frame.Tabs = {}
 	local strip = ns.root.MakeTabStrip(frame)
 	for _, i in ipairs(TAB_ORDER) do
@@ -1298,6 +1338,7 @@ local function RenderVisual(id, resetScroll)
 	if not cv then return end
 	local mod = (id == TAB.PLAN and ns.Plan) or (id == TAB.INVEST and ns.Invest) or (id == TAB.QUEUE and ns.Queue)
 		or (id == TAB.SALVAGE and ns.Salvage) or (id == TAB.BUY and ns.Buy) or (id == TAB.SELL and ns.Sell) or (id == TAB.RECIPES and ns.RecipeShop)
+		or (id == TAB.AUDIT and UI.AuditView)
 	if id == TAB.QUEUE and frame.queueBar then
 		frame.queueBar.craft:SetText(ns.Queue.NextLabel())
 		frame.queueBar.cbPlan:SetChecked(Cfg("queueIncludePlan") and true or false)
@@ -1402,7 +1443,7 @@ end
 
 -- ===== Tamanho da janela =====
 local DEFAULT_HEIGHT = 128 + TOTAL_ROWS * ROW_H
-local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
+local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.AUDIT] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
 
 -- largura mínima de cada aba (o que precisa para não cortar nada)
 local function TabMinWidth(id)

@@ -723,3 +723,12 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - `UI.SetRecipeList` passou a refazer o layout além do refresh — as colunas mudam com a aba, e sem isso os cabeçalhos ficavam na posição da aba anterior.
 - Coluna nova entra sozinha na ordem salva (o `ColCfg` já cuidava disso), logo depois da Lucro/conc; dá para mover e ocultar como as outras, e ordenar clicando no título.
 - Teste: t102.lua — colunas certas em cada aba, o valor batendo com a margem (94% → 0,94o) e a ordenação pela coluna nova.
+
+## v1.34.0 — aba Auditoria (relato do Rafael: "Alt+clique diz audit e não acontece nada")
+- O Alt+clique **funcionava** — o problema era o destino. A auditoria sai pelo `root.Out`, que procura uma aba de CHAT chamada Log/Logs/Royal Revenue/RR/registro e aceita aba apenas **encaixada** (`shown or docked`): o texto ia para uma aba que não estava selecionada, então na prática "não acontecia nada". O addon nunca criou essa aba nem avisou que ela precisava existir.
+- Aba nova **Auditoria** (10, no grupo Craft): mostra o cálculo completo da receita dentro da janela, sem depender de chat nenhum. Alt+clique numa receita enche a aba e **troca para ela**.
+- `ns.AuditTo(query, alsoPrint)`: roda a auditoria recolhendo as linhas em `ns.auditOut` em vez de imprimir. O `print` do Core.lua ganhou um "sink" — com ele ligado as mensagens vão para a tabela, então `ns.Print` e os `print` internos são capturados sem reescrever as ~50 linhas do `Audit`.
+- `/lucro audit <nome>` continua mandando o texto para o log (quem usa o comando espera isso) **e** passou a encher a aba, trocando para ela se a janela estiver aberta.
+- Botão "Copiar p/ log" na aba, para jogar as linhas no chat quando quiser dar Ctrl+C.
+- Nenhum arquivo novo no `.toc`: `/reload` basta, não precisa reiniciar o WoW.
+- Teste: t103.lua — a aba existe e começa com a explicação; o Alt+clique coleta 26 linhas e troca para a aba **sem mandar nada ao log**; o comando manda as 26 linhas ao log.
