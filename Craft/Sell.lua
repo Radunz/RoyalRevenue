@@ -1185,15 +1185,23 @@ end
 local DURATION = 2   -- 1 = 12 h, 2 = 24 h, 3 = 48 h
 function Sell.Post(m)
 	if not Sell.AHOpen() then ns.Print(L["abra a casa de leilões para postar."]) return end
-	-- cada falha com a sua mensagem (antes as três davam "item não encontrado na bolsa")
+	-- cada falha com a sua mensagem (antes as três davam "item não encontrado na bolsa").
+	-- Tudo vai também para ns.Log: o ns.Print cai numa aba de chat que pode nem estar visível,
+	-- e aí a tentativa de anunciar some sem deixar rastro nenhum.
+	local nome = (m.link and m.link:match("%[(.-)%]")) or (m.id and C_Item.GetItemNameByID(m.id)) or tostring(m.id)
+	local function falha(msg)
+		ns.Print(msg)
+		ns.Log(string.format("vender: %s (id %s, %s) — %s", nome, tostring(m.id),
+			m.gear and "equipamento" or "commodity", msg))
+	end
 	if ns.IsAuctionable and m.id and not ns.IsAuctionable(m.id) then
-		ns.Print(L["este item é vinculado (ou vinculado ao bando): não pode ser anunciado na casa de leilões."])
+		falha(L["este item é vinculado (ou vinculado ao bando): não pode ser anunciado na casa de leilões."])
 		return
 	end
 	local loc = Location(m)
-	if not loc then ns.Print(L["item não encontrado na bolsa (atualize a aba)."]) return end
+	if not loc then falha(L["item não encontrado na bolsa (atualize a aba)."]) return end
 	local price = (Sell.SuggestPrice(m))
-	if not price then ns.Print(L["sem preço para este item: não dá para sugerir um valor de anúncio."]) return end
+	if not price then falha(L["sem preço para este item: não dá para sugerir um valor de anúncio."]) return end
 	local qty = Sell.PostQty(m)
 	local ok, err
 	if m.gear then
@@ -1201,6 +1209,9 @@ function Sell.Post(m)
 	else
 		ok, err = pcall(C_AuctionHouse.PostCommodity, loc, DURATION, qty, price)
 	end
+	ns.Log(string.format("vender: %s (id %s, %s) bolsa %s/%s qtd %s preço %s -> %s",
+		nome, tostring(m.id), m.gear and "equipamento" or "commodity", tostring(m.bag), tostring(m.slot),
+		tostring(m.gear and 1 or qty), tostring(price), ok and "chamada aceita" or ("ERRO " .. tostring(err))))
 	if not ok then
 		ns.Print(L["o jogo recusou o anúncio: "] .. tostring(err))
 		return
@@ -1274,18 +1285,25 @@ f:RegisterEvent("AUCTION_HOUSE_CLOSED")
 f:RegisterEvent("BAG_UPDATE_DELAYED")
 f:SetScript("OnEvent", function(_, event)
 	if not LucroCraftDB then return end
+	-- a resposta do jogo também fica no log: é o que diz se o anúncio saiu, pediu confirmação
+	-- ou foi recusado depois da chamada ter sido aceita
+	local qual = Sell.lastPost and Sell.lastPost.name or "?"
 	if event == "AUCTION_HOUSE_AUCTION_CREATED" then
 		if Sell.lastPost then
 			ns.Print(string.format(L["anunciado: %sx %s a %s."], root.Num(Sell.lastPost.qty, 0), Sell.lastPost.name, P.FormatMoney(Sell.lastPost.price)))
+			ns.Log(string.format("vender: %s anunciado (%sx a %s)", qual,
+				tostring(Sell.lastPost.qty), tostring(Sell.lastPost.price)))
 			Sell.lastPost = nil
 		end
 		C_Timer.After(1, Sell.Refresh)
 		return
 	elseif event == "AUCTION_HOUSE_POST_WARNING" then
 		ns.Print(L["o jogo pediu confirmação do preço: confirme na janela da casa de leilões."])
+		ns.Log("vender: " .. qual .. " — o jogo pediu confirmação do preço (confirmar na janela da AH)")
 		return
 	elseif event == "AUCTION_HOUSE_POST_ERROR" then
 		ns.Print(L["o jogo recusou o anúncio."])
+		ns.Log("vender: " .. qual .. " — o jogo RECUSOU o anúncio (POST_ERROR)")
 		Sell.lastPost = nil
 		return
 	end

@@ -737,3 +737,9 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - O Rafael não conseguiu capturar um erro no BugGrabber. Motivo provável: o desenho das abas roda dentro de `pcall`, então o erro **não** vira erro de Lua — fica só escrito dentro da aba e some ao trocar de aba. BugGrabber/BugSack nunca veem.
 - `RenderVisual`, `RenderPane` e o 2º desenho da aba Destruir agora registram a falha com `ns.Log` antes de mostrar o texto. O log fica no SavedVariables (`LucroCraftDB.log`, 300 linhas), então dá para investigar depois mesmo sem reproduzir.
 - Sem mudança de comportamento: a aba continua mostrando o mesmo aviso.
+
+## v1.34.2 — rastro do anúncio no log (Rafael: "não consigo postar o item no Uriuri, olhe os logs")
+- O log não tinha **nada** sobre anúncio: todo o retorno do `Sell.Post` e dos eventos da casa de leilões ia por `ns.Print`, que cai na aba de chat — a mesma que pode nem estar visível (foi o que já tinha escondido a auditoria na v1.34.0).
+- Agora cada tentativa de anunciar grava em `ns.Log` (SavedVariables): nome e id do item, se é equipamento ou commodity, bolsa/espaço, quantidade, preço e o resultado (chamada aceita ou o erro do `pcall`). As três falhas antes da chamada (item vinculado, não achado na bolsa, sem preço) também ficam registradas.
+- Os eventos do jogo depois da chamada entram no log também: anunciado (`AUCTION_HOUSE_AUCTION_CREATED`), pedido de confirmação de preço (`POST_WARNING`) e recusa (`POST_ERROR`). É o que separa "o addon nem chamou" de "o addon chamou e o jogo recusou".
+- Só registro: nenhuma mudança no comportamento do anúncio.
