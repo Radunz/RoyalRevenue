@@ -1203,6 +1203,16 @@ function Sell.Post(m)
 	local price = (Sell.SuggestPrice(m))
 	if not price then falha(L["sem preço para este item: não dá para sugerir um valor de anúncio."]) return end
 	local qty = Sell.PostQty(m)
+	-- A casa de leilões limita as mensagens ao servidor: passando do limite, o jogo DESCARTA
+	-- o anúncio em silêncio (AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED) — o pcall devolve ok e
+	-- nada acontece. Era o que fazia equipamento "não postar" depois do primeiro.
+	if C_AuctionHouse.IsThrottledMessageSystemReady then
+		local okT, pronto = pcall(C_AuctionHouse.IsThrottledMessageSystemReady)
+		if okT and pronto == false then
+			falha(L["a casa de leilões está ocupada (limite de mensagens): espere 1 ou 2 segundos e tente de novo."])
+			return
+		end
+	end
 	local ok, err
 	if m.gear then
 		ok, err = pcall(C_AuctionHouse.PostItem, loc, DURATION, 1, nil, price)
@@ -1281,6 +1291,8 @@ f:RegisterEvent("AUCTION_HOUSE_SHOW")
 pcall(f.RegisterEvent, f, "AUCTION_HOUSE_AUCTION_CREATED")
 pcall(f.RegisterEvent, f, "AUCTION_HOUSE_POST_WARNING")
 pcall(f.RegisterEvent, f, "AUCTION_HOUSE_POST_ERROR")
+-- sem este, um anúncio descartado pelo limite de mensagens não dá sinal nenhum
+pcall(f.RegisterEvent, f, "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED")
 f:RegisterEvent("AUCTION_HOUSE_CLOSED")
 f:RegisterEvent("BAG_UPDATE_DELAYED")
 f:SetScript("OnEvent", function(_, event)
@@ -1305,6 +1317,13 @@ f:SetScript("OnEvent", function(_, event)
 		ns.Print(L["o jogo recusou o anúncio."])
 		ns.Log("vender: " .. qual .. " — o jogo RECUSOU o anúncio (POST_ERROR)")
 		Sell.lastPost = nil
+		return
+	elseif event == "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED" then
+		if Sell.lastPost then
+			ns.Print(L["a casa de leilões descartou o anúncio (limite de mensagens): tente de novo em 1 ou 2 segundos."])
+			ns.Log("vender: " .. qual .. " — DESCARTADO pelo limite de mensagens da AH")
+			Sell.lastPost = nil
+		end
 		return
 	end
 	if event == "AUCTION_HOUSE_SHOW" then

@@ -743,3 +743,9 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - Agora cada tentativa de anunciar grava em `ns.Log` (SavedVariables): nome e id do item, se é equipamento ou commodity, bolsa/espaço, quantidade, preço e o resultado (chamada aceita ou o erro do `pcall`). As três falhas antes da chamada (item vinculado, não achado na bolsa, sem preço) também ficam registradas.
 - Os eventos do jogo depois da chamada entram no log também: anunciado (`AUCTION_HOUSE_AUCTION_CREATED`), pedido de confirmação de preço (`POST_WARNING`) e recusa (`POST_ERROR`). É o que separa "o addon nem chamou" de "o addon chamou e o jogo recusou".
 - Só registro: nenhuma mudança no comportamento do anúncio.
+
+## v1.34.3 — anúncio de equipamento descartado em silêncio pelo limite da AH
+- Com o rastro da v1.34.2 deu para ver o padrão: de 10 anúncios seguidos, **todas as 5 commodities saíram** e dos 5 equipamentos **só o primeiro** saiu. Os outros quatro registraram "chamada aceita" e **nenhum** evento de resposta — nem anunciado, nem erro, nem aviso.
+- A casa de leilões limita as mensagens ao servidor e **descarta** as que passam do limite, avisando por `AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED` — evento que o addon não escutava. Daí o anúncio sumir sem rastro: o `pcall` devolve ok (a chamada foi feita) e o jogo joga a mensagem fora.
+- Agora o addon escuta esse evento (registra no log e avisa no chat) e, antes de anunciar, confere `C_AuctionHouse.IsThrottledMessageSystemReady()`: com a AH ocupada, avisa para esperar 1 ou 2 segundos em vez de mandar um anúncio que vai ser descartado.
+- Com isso o log passa a distinguir os quatro casos: o addon nem chamou · chamou e deu erro na hora · chamou e o jogo recusou (`POST_ERROR`) · chamou e o jogo **descartou** (limite).
