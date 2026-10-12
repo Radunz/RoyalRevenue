@@ -732,3 +732,8 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - Botão "Copiar p/ log" na aba, para jogar as linhas no chat quando quiser dar Ctrl+C.
 - Nenhum arquivo novo no `.toc`: `/reload` basta, não precisa reiniciar o WoW.
 - Teste: t103.lua — a aba existe e começa com a explicação; o Alt+clique coleta 26 linhas e troca para a aba **sem mandar nada ao log**; o comando manda as 26 linhas ao log.
+
+## v1.34.1 — erro de aba que não chegava no BugGrabber
+- O Rafael não conseguiu capturar um erro no BugGrabber. Motivo provável: o desenho das abas roda dentro de `pcall`, então o erro **não** vira erro de Lua — fica só escrito dentro da aba e some ao trocar de aba. BugGrabber/BugSack nunca veem.
+- `RenderVisual`, `RenderPane` e o 2º desenho da aba Destruir agora registram a falha com `ns.Log` antes de mostrar o texto. O log fica no SavedVariables (`LucroCraftDB.log`, 300 linhas), então dá para investigar depois mesmo sem reproduzir.
+- Sem mudança de comportamento: a aba continua mostrando o mesmo aviso.

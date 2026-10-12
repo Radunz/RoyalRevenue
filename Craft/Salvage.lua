@@ -1234,7 +1234,8 @@ function S.Render(cv)
 		if math.abs(want - (cv._salvListH or 300)) > 4 then
 			cv._salvListH = want
 			cv._salvRe = true
-			pcall(S.Render, cv)
+			local okR, errR = pcall(S.Render, cv)
+			if not okR then ns.Log("erro no 2º desenho da aba Destruir: " .. tostring(errR)) end
 			cv._salvRe = nil
 		end
 	end

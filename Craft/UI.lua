@@ -1346,6 +1346,9 @@ local function RenderVisual(id, resetScroll)
 	if resetScroll then cv:ResetScroll() end
 	local ok, err = pcall(mod.Render, cv)
 	if not ok then
+		-- o pcall esconde o erro do BugGrabber/BugSack e o texto some ao trocar de aba:
+		-- registra no log (que fica no SavedVariables) para dar para investigar depois
+		ns.Log(string.format("erro ao montar a aba %s: %s", tostring(id), tostring(err)))
 		cv:Begin()
 		cv:Text(8, 8, L["|cffff5555Erro ao montar a aba:|r "] .. tostring(err), GameFontHighlightSmall, cv:Width() - 16)
 		cv:End(40)
@@ -1358,7 +1361,10 @@ local function RenderPane(id)
 		frame.queueBar.cbPlan:SetChecked(Cfg("queueIncludePlan") and true or false)
 	end
 	local ok, txt = pcall(function() return mod and mod.GetText and mod.GetText() end)
-	if not ok then txt = L["|cffff5555Erro ao montar a aba:|r "] .. tostring(txt) end
+	if not ok then
+		ns.Log(string.format("erro ao montar a aba %s (texto): %s", tostring(id), tostring(txt)))
+		txt = L["|cffff5555Erro ao montar a aba:|r "] .. tostring(txt)
+	end
 	local child, pane = frame.paneChild, frame.pane
 	local w = frame:GetWidth() - 28
 	child:SetWidth(w)
