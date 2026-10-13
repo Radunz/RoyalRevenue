@@ -837,3 +837,17 @@ mais duas otimizações.
 qualidade — o modificador 40, que é por item, continua sendo o do modelo. É o desenho original e só
 vale como reserva (o `CraftedStats` prefere sempre o `outLink` que o jogo devolve). Para confirmar se
 isso distorce algum tooltip precisa de teste no jogo.
+
+## v1.34.7 — interface 120105 (patch 12.1.5 do jogo)
+- O jogo subiu para **12.1.5** (build 70391, lido de `.build.info`), então a interface passa a ser
+  `120105`. Conferido por duas fontes independentes: 29 addons instalados já declaram `120105`
+  (incluindo o `!BugGrabber` do BigWigs) e os SavedVariables registram `12.1.5` / `70391`.
+- `RoyalRevenue.toc`: `## Interface: 120105, 120100, 120007, 120005`. O valor novo entra **primeiro**
+  porque o passo `Build release.json` do workflow extrai com `cut -d, -f1` — fora de primeiro, o
+  release.json diria ao WowUp a interface errada.
+- Validação do resto do `.toc`: os 35 arquivos listados existem e nenhum `.lua` de `Craft/`/`Livro/`
+  ficou de fora (35 = 35).
+- Validação contra o patch: zero erros do Royal Revenue no BugGrabber em todas as sessões (atual: 66;
+  os 7 registrados são do Blizzard e de outros addons). Das 1.641 receitas, 1.641 calculam a operação
+  normalmente; os 2 `opError` são iscas de pesca (profissão 2911), receitas sem níveis de qualidade,
+  onde a API devolver nil é o correto — condição anterior ao patch.
