@@ -1712,7 +1712,9 @@ end
 local function CheckAdjustment(last)
 	local c = CharDB()
 	local now = GetMoney()
-	if last and now ~= last then
+	-- last == 0 não é saldo, é o ouro que ainda não chegou do servidor numa sessão anterior (0 é verdadeiro
+	-- em Lua, então o `if last` sozinho deixava passar e o ajuste saía do tamanho do saldo inteiro).
+	if last and last > 0 and now > 0 and now ~= last then
 		local diff = now - last
 		local existed = c.days[Today()] ~= nil
 		local d = Day()
@@ -1723,8 +1725,41 @@ local function CheckAdjustment(last)
 		Post(Ledger.ADJ_CODE, string.format(L["Movimentos não registrados (sessão de %s não salva)"], when), diff, true)
 		print("|cffd4af37Royal Revenue|r: " .. string.format(L["ajuste de conciliação de %s lançado (dados da sessão anterior não foram salvos)."], ns.P.FormatMoney(diff)))
 	end
-	c.lastMoney = now
+	if now > 0 then c.lastMoney = now end
 	checked = true
+end
+
+-- ===== correção única (v1.34.4): ajuste de conciliação do tamanho do saldo =====
+-- Enquanto o guard do login deixava passar last == 0, o primeiro login que gravou lastMoney = 0 fazia o
+-- login seguinte calcular diff = ouro - 0 e lançar um ajuste do saldo inteiro (Uriuri, 09/10: 371.797,88 —
+-- num dia em que o caixa variou -3.445,95). Remove só o que é demonstrável: o dia fecha SEM o ajuste e
+-- não fecha COM ele. Ajuste legítimo (o que cobre sessão realmente perdida) faz o contrário e fica.
+function Ledger.FixAdj0()
+	if LucroLivroDB.fixAdj0 then return end
+	LucroLivroDB.fixAdj0 = true
+	local TOL = 10000                                    -- 1 ouro, a mesma tolerância da conciliação
+	for ck, c in pairs(LucroLivroDB.chars or {}) do
+		for dk, day in pairs(c.days or {}) do
+			local adj = day.adj or 0
+			if adj ~= 0 and day.cashOpen and day.cashClose then
+				local real = day.cashClose - day.cashOpen
+				local com = DayMv(day)
+				local sem = com - adj
+				if math.abs(real - sem) < TOL and math.abs(real - com) >= TOL then
+					day.adj = 0
+					local J = c.journal or {}
+					for i = #J, 1, -1 do
+						local e = J[i]
+						if e.a == Ledger.ADJ_CODE and e.v == adj and root.DayKey(e.t) == dk then
+							table.remove(J, i)
+						end
+					end
+					print("|cffd4af37Royal Revenue|r: " .. string.format(
+						L["ajuste de conciliação indevido removido (%s, %s): %s"], ck, dk, ns.P.FormatMoney(adj)))
+				end
+			end
+		end
+	end
 end
 
 -- ===== tempo em cada atividade (a cada 15 s, fora de AFK) =====
@@ -1854,18 +1889,25 @@ f:SetScript("OnEvent", function(_, event, ...)
 			pcall(Ledger.FixDialogRepair)
 			pcall(Ledger.FixOrders0507)
 			pcall(Ledger.FixMoxie0508)
+			pcall(Ledger.FixAdj0)
 			C_Timer.After(10, function() pcall(Ledger.FixGear0503) end)
 			ScanQuestLog()
 			-- o ouro às vezes ainda vem 0 no login: confere depois de alguns segundos
 			local saved = CharDB().lastMoney
+			local tries = 0
 			local function check()
-				if GetMoney() == 0 and (saved or 0) > 0 then return false end
+				-- o ouro vem 0 enquanto o servidor não manda o saldo: 0 nunca é saldo, nem para comparar nem
+				-- para gravar. Antes só esperava quando já havia saldo gravado, e tentava uma única vez.
+				if GetMoney() == 0 then
+					tries = tries + 1
+					if tries <= 6 then C_Timer.After(5, check) end
+					return
+				end
 				lastMoney = GetMoney()
 				CheckAdjustment(saved)
 				Day().cashClose = GetMoney()
-				return true
 			end
-			if not check() then C_Timer.After(5, check) end
+			check()
 			CharDB().lastSeen = time()
 			C_Timer.NewTicker(TICK, function() pcall(Tick) end)
 			C_Timer.After(3, function() pcall(ReadWear) end)

@@ -749,3 +749,25 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
 - A casa de leilões limita as mensagens ao servidor e **descarta** as que passam do limite, avisando por `AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED` — evento que o addon não escutava. Daí o anúncio sumir sem rastro: o `pcall` devolve ok (a chamada foi feita) e o jogo joga a mensagem fora.
 - Agora o addon escuta esse evento (registra no log e avisa no chat) e, antes de anunciar, confere `C_AuctionHouse.IsThrottledMessageSystemReady()`: com a AH ocupada, avisa para esperar 1 ou 2 segundos em vez de mandar um anúncio que vai ser descartado.
 - Com isso o log passa a distinguir os quatro casos: o addon nem chamou · chamou e deu erro na hora · chamou e o jogo recusou (`POST_ERROR`) · chamou e o jogo **descartou** (limite).
+
+## v1.34.4 — a diferença de 371.797,88 na conciliação do Livro ("verifique a diferença que tenho no meu ledger")
+- Causa: `CheckAdjustment` recebe o último saldo gravado e lança a diferença como "ajuste de
+  conciliação" quando o ouro real não bate (sessão que o jogo não salvou). O teste era `if last and
+  now ~= last`, e **em Lua o `0` é verdadeiro**: num personagem cujo `lastMoney` havia sido gravado
+  como 0 (o servidor ainda não tinha mandado o ouro no login anterior), o login seguinte calculava
+  `diff = ouro - 0` e lançava um ajuste **do tamanho do saldo inteiro**. No Uriuri saiu 371.797,88 em
+  09/10, num dia em que o caixa variou -3.445,95 — exatamente a diferença que aparecia na aba.
+  O guard do login (`if GetMoney() == 0 and (saved or 0) > 0`) só esperava quando já existia saldo
+  gravado, então era ele mesmo que semeava o `lastMoney = 0`, e tentava de novo uma única vez.
+- O que mudou:
+  - `Livro/Ledger.lua` `CheckAdjustment`: exige `last > 0 and now > 0`; nunca grava `lastMoney = 0`.
+  - `Livro/Ledger.lua` PLAYER_LOGIN: `GetMoney() == 0` nunca vale no login (com ou sem saldo gravado)
+    e agora tenta de novo a cada 5 s, por até 30 s.
+  - `Livro/Ledger.lua` `Ledger.FixAdj0` (correção única, flag `LucroLivroDB.fixAdj0`): apaga o ajuste
+    indevido do dia e do Diário. Remove só o que é demonstrável — o dia fecha SEM o ajuste e não fecha
+    COM ele. Ajuste legítimo faz o contrário e fica.
+  - `Livro/Locale.lua`: tradução EN do aviso de remoção.
+- Resultado nos dados reais: os 15 personagens passaram a conciliar, diferença total 0,00 (antes
+  -371.797,88, toda no Uriuri).
+- Teste: t104.lua (ajuste indevido removido, ajuste legítimo intacto, as duas contas conciliadas,
+  e a correção roda uma vez só).

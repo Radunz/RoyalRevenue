@@ -249,6 +249,7 @@ local T = {
 	["Ajustes de conciliação (sessões não salvas)"] = "Reconciliation adjustments (unsaved sessions)",
 	["Movimentos não registrados (sessão de %s não salva)"] = "Unrecorded movements (session of %s not saved)",
 	["ajuste de conciliação de %s lançado (dados da sessão anterior não foram salvos)."] = "reconciliation adjustment of %s posted (data from the previous session was not saved).",
+	["ajuste de conciliação indevido removido (%s, %s): %s"] = "bogus reconciliation adjustment removed (%s, %s): %s",
 	["Ao entrar no jogo, o ouro real não batia com o último saldo gravado: a sessão anterior fechou sem salvar (travamento, Gerenciador de Tarefas, queda de energia). A diferença foi lançada aqui para a conciliação fechar; o detalhe dessa sessão se perdeu."] = "On login, the actual gold didn't match the last saved balance: the previous session closed without saving (crash, Task Manager, power loss). The difference was posted here so the reconciliation balances; that session's details were lost.",
 	["Baú"] = "Chest",
 	["Recompensas pelo correio"] = "Rewards by mail",
