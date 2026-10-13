@@ -111,12 +111,16 @@ local function CandTip(c, r)
 		Line(tt, L["Ganho por semana"], P.FormatMoney(r.gain), { 0.3, 1, 0.3 })
 		Line(tt, L["Recupera em"], r.payback and string.format(L["%.1f semanas"], r.payback) or L["sem preço"])
 		Line(tt, L["Custo"], (c.price and P.FormatMoney(c.price) or "—") .. " (" .. (c.priceFrom or "?") .. ")")
-		Line(tt, L["Atributos"], Invest._StatStr(r.stats))
+		Line(tt, L["Atributos"], Invest._StatStr(r.stats)
+			.. (r.crafted and (" (" .. ns.QIcon(5, 5) .. ")") or L[" (item base)"]))
 		if r.statChoice then Line(tt, L["Fabricar com"], r.statChoice, { 0.4, 0.8, 1 }) end
 		for _, ch in ipairs(r.allChoices or {}) do
 			if ch.label ~= r.statChoice then Line(tt, "   " .. ch.label, P.FormatGold(ch.gain, true), GREY) end
 		end
-		if r.sameUpgrade then tt:AddLine(L["Mesma peça que você usa, refeita na qualidade máxima"], 1, 0.82, 0, true) end
+		if r.sameUpgrade then
+			tt:AddLine(string.format(L["Mesma peça que você usa (%s), refeita na qualidade máxima"],
+				ns.QIcon(r.sameUpgrade, 5)), 1, 0.82, 0, true)
+		end
 		if r.showcase or (r.gain or 0) <= 0 then
 			tt:AddLine(L["Versão épica: aparece porque você usa uma peça azul. Pelos atributos de hoje não aumenta o lucro."], 0.64, 0.21, 0.93, true)
 		end
@@ -699,7 +703,10 @@ function Invest.Render(cv)
 					-- ferramenta: sigla do atributo a escolher na fabricação no canto do ícone
 					local badge = u.r.statChoice and u.r.statChoice:sub(1, 3):upper() or nil
 					cv:Icon(ux + 6, cy + 80, 34, V.ItemIcon(u.c.itemID), {
-						rarity = rarity, quality = ns.QIcon(5, 5, 12), link = u.c.outLink, tip = CandTip(u.c, u.r),
+						-- ★5 só quando os atributos saíram do link na qualidade máxima; senão são os do item
+						-- base e prometer ★5 era mentir (era fixo em 5 aqui)
+						rarity = rarity, quality = u.r.crafted and ns.QIcon(5, 5, 12) or nil,
+						link = u.c.outLink, tip = CandTip(u.c, u.r),
 						count = badge })
 					if u.showcase then
 						local gain = u.r.gain or 0

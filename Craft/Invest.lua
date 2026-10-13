@@ -215,42 +215,70 @@ end
 -- missivas). Para comparar de verdade, montamos o link do candidato a partir do link do item
 -- equipado no mesmo slot (mesmo contexto, mesmas missivas), trocando o itemID e colocando a
 -- qualidade escolhida. Bônus de qualidade do Midnight: 12499..12502 = Q2..Q5; modificador 38 = qualidade (5..8).
+-- Dois formatos de qualidade convivem nos links (medido no SavedVariables real):
+--   antigo    -> bônus 12499..12502 = Q2..Q5 E o modificador 38 = qualidade+3 (5..8);
+--   Midnight  -> nenhum bônus de qualidade e o modificador 38 = a própria qualidade (1..5).
+-- Todo o equipamento de profissão atual é do 2º formato (bônus 3524, modificador 38:2..5), que era
+-- justamente o que estas funções não entendiam.
 local TIER_BONUS = { [2] = 12499, [3] = 12500, [4] = 12501, [5] = 12502 }
 local IS_TIER = { [12499] = true, [12500] = true, [12501] = true, [12502] = true }
 
-local function BuildCraftedLink(templateLink, itemID, tier, statMod)
-	if not templateLink or not itemID then return nil end
-	local s = templateLink:match("item:([^|]+)")
+-- campos de um link item:...  (f[13] = nº de bônus, f[14+nb] = nº de modificadores, depois os pares)
+local function LinkFields(link)
+	local s = link and link:match("item:([^|]+)")
 	if not s then return nil end
 	local f = {}
 	for v in (s .. ":"):gmatch("([^:]*):") do table.insert(f, v) end
-	local nb = tonumber(f[13] or "")
-	if not nb or nb < 1 then return nil end
-	local found = false
+	if not tonumber(f[13] or "") then return nil end
+	return f, tonumber(f[13])
+end
+
+local function BuildCraftedLink(templateLink, itemID, tier, statMod)
+	if not templateLink or not itemID then return nil end
+	local f, nb = LinkFields(templateLink)
+	if not f or nb < 1 then return nil end
+	-- formato antigo: a qualidade está no bônus, e aí o modificador 38 vale qualidade+3
+	local legacy = false
 	for i = 14, 13 + nb do
 		local b = tonumber(f[i] or "")
-		if b and IS_TIER[b] then f[i] = tostring(TIER_BONUS[tier] or 12502); found = true end
+		if b and IS_TIER[b] then f[i] = tostring(TIER_BONUS[tier] or 12502); legacy = true end
 	end
-	if not found then return nil end   -- item de outra expansão: não serve de modelo
+	local found = legacy
 	local nm = tonumber(f[14 + nb] or "") or 0
 	for k = 0, nm - 1 do
 		local idx = 15 + nb + k * 2
-		if f[idx] == "38" then f[idx + 1] = tostring((tier or 5) + 3) end
+		if f[idx] == "38" then
+			f[idx + 1] = tostring(legacy and ((tier or 5) + 3) or (tier or 5))
+			found = true
+		end
 		if statMod and f[idx] == "29" then f[idx + 1] = tostring(statMod) end
 	end
+	if not found then return nil end   -- sem marca de qualidade nenhuma: não serve de modelo
 	f[1] = tostring(itemID)
 	f[2] = ""   -- sem encantamento: ele é avaliado à parte
 	return "item:" .. table.concat(f, ":")
 end
 
--- qualidade (2..5) de um link fabricado no Midnight; nil se não identificar
+-- qualidade (1..5) de um link fabricado; nil se não identificar.
+-- Lia só o bônus antigo e varrendo o link inteiro com gmatch, então devolvia nil para todo
+-- equipamento de profissão da Midnight — e quem chama tratava nil como "já está na qualidade máxima".
 local function LinkTier(link)
-	local s = link and link:match("item:([^|]+)")
-	if not s then return nil end
-	for b in s:gmatch("(%d+)") do
-		local n = tonumber(b)
-		if IS_TIER[n] then return n - 12497 end
+	local f, nb = LinkFields(link)
+	if not f then return nil end
+	for i = 14, 13 + nb do
+		local b = tonumber(f[i] or "")
+		if b and IS_TIER[b] then return b - 12497 end
 	end
+	local nm = tonumber(f[14 + nb] or "") or 0
+	for k = 0, nm - 1 do
+		local idx = 15 + nb + k * 2
+		if f[idx] == "38" then
+			local v = tonumber(f[idx + 1] or "")
+			if v and v >= 1 and v <= 5 then return v end
+			if v and v >= 6 and v <= 8 then return v - 3 end   -- formato antigo sem o bônus
+		end
+	end
+	return nil
 end
 
 -- sempre compara contra a melhor versão fabricável (qualidade máxima)
@@ -293,6 +321,9 @@ local function ToolStatOptions(c, templateLinks, profName)
 						end
 					end
 				end
+				-- só existem 3 stats possíveis: achadas as 3, pára (eram até 101 tooltips por ferramenta,
+				-- custo que não aparecia enquanto o BuildCraftedLink devolvia nil sempre)
+				if #opts >= 3 then break end
 			end
 			if #opts > 0 then break end
 		end
@@ -1399,6 +1430,8 @@ end
 Invest.GetText = Render
 
 -- usados pela versão visual (InvestView.lua)
+Invest._LinkTier = LinkTier
+Invest._BuildCraftedLink = BuildCraftedLink
 Invest._CurrentEntry = CurrentEntry
 Invest._StatStr = StatStr
 Invest._StatsText = StatsText

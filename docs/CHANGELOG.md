@@ -771,3 +771,34 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
   -371.797,88, toda no Uriuri).
 - Teste: t104.lua (ajuste indevido removido, ajuste legítimo intacto, as duas contas conciliadas,
   e a correção roda uma vez só).
+
+## v1.34.5 — atributos do acessório fabricado diferentes dos da aba Investimento (print do Rafael)
+- Causa: `LinkTier` (Craft/Invest.lua) só sabia ler a qualidade no formato **antigo** de link, pelo
+  bônus 12499..12502. Medindo os 1.937 links `item:` do SavedVariables real, os dois formatos
+  convivem:
+  - antigo (78 links): bônus 12499..12502 = Q2..Q5 **e** modificador 38 = qualidade+3 (5..8);
+  - Midnight (~1.800 links): nenhum bônus de qualidade, modificador 38 = **a própria** qualidade (1..5).
+  Todo o equipamento de profissão atual é do 2º formato (bônus 3524, modificador 38:2..5), então
+  `LinkTier` devolvia `nil` para todos — e quem chama lê `nil` como "já está na qualidade máxima"
+  (`LinkTier(g.link) or BEST_TIER`). Efeitos:
+  - a peça equipada era tratada como Q5, então **a melhoria "refazer na qualidade máxima" era
+    descartada** (Invest.lua:861) e `sameUpgrade` nunca acendia;
+  - `BuildCraftedLink` exigia o bônus antigo e devolvia `nil` sempre, matando o caminho reserva:
+    candidato sem `outLink` do scan passava a mostrar os atributos do **item base** (qualidade mais
+    baixa, que é o que o tooltip pelo itemID dá) — e o ícone prometia **★5 fixo** mesmo assim;
+  - se o `BuildCraftedLink` chegasse a rodar, ainda gravava modificador 38 = qualidade+3 (8 para Q5),
+    que é a convenção do formato antigo.
+- O que mudou:
+  - `Craft/Invest.lua` `LinkFields` (nova): quebra o link em campos uma vez só, respeitando o nº de
+    bônus e o nº de modificadores (o `LinkTier` antigo varria o link inteiro com `gmatch`).
+  - `Craft/Invest.lua` `LinkTier`: lê as duas convenções e devolve 1..5; `nil` só quando não há marca
+    de qualidade nenhuma.
+  - `Craft/Invest.lua` `BuildCraftedLink`: aceita o formato da Midnight e grava o modificador 38 na
+    convenção do link-modelo (qualidade+3 no antigo, qualidade direta no novo).
+  - `Craft/InvestView.lua`: o ★5 do ícone do candidato só aparece quando os atributos vieram do link
+    na qualidade máxima; o tooltip passa a dizer de onde vêm (`★5` ou `(item base)`) e o aviso de
+    "mesma peça refeita" informa a qualidade que você usa hoje.
+  - `Craft/Locale.lua`: tradução EN do aviso novo.
+  - `Craft/Invest.lua`: pontas de teste `Invest._LinkTier` e `Invest._BuildCraftedLink`.
+- Teste: t105.lua (as duas convenções, link sem qualidade = nil, remontagem do link, e o efeito na
+  decisão do Investimento: Q2/Q3 passam a oferecer refazer na Q5 e Q5 segue descartado).

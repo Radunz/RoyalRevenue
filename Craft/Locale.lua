@@ -667,6 +667,7 @@ local T = {
 	["%.1f semanas"] = "%.1f weeks",
 	["Fabricar com"] = "Craft with",
 	["Mesma peça que você usa, refeita na qualidade máxima"] = "Same piece you use, remade at max quality",
+	["Mesma peça que você usa (%s), refeita na qualidade máxima"] = "Same piece you use (%s), remade at max quality",
 	["Raridade menor que a sua, mas com atributos melhores"] = "Lower rarity than yours, but better stats",
 	["Tipo de acessório não identificado: confira o espaço"] = "Accessory type not identified: check the slot",
 	["Passa a sair %s sem concentração: %s"] = "Starts coming out %s without concentration: %s",
