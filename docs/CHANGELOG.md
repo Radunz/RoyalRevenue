@@ -802,3 +802,38 @@ Revisão do código desta leva, medindo com `tests/prof.lua` e relendo as partes
   - `Craft/Invest.lua`: pontas de teste `Invest._LinkTier` e `Invest._BuildCraftedLink`.
 - Teste: t105.lua (as duas convenções, link sem qualidade = nil, remontagem do link, e o efeito na
   decisão do Investimento: Q2/Q3 passam a oferecer refazer na Q5 e Q5 segue descartado).
+
+## v1.34.6 — revisão e otimização das duas correções anteriores ("revise, otimize")
+Revisão do que entrou na v1.34.4 e v1.34.5. Dois defeitos reais encontrados no meu próprio código,
+mais duas otimizações.
+
+- **`Ledger.FixAdj0` zerava o dia e deixava o Diário sujo** (defeito introduzido na v1.34.4).
+  `day.adj` **acumula** (`d.adj = (d.adj or 0) + diff`), então um dia com dois ajustes guarda a soma e
+  nenhum lançamento casava com `e.v == adj`: o dia era zerado e os lançamentos ficavam no Diário, que
+  passaria a discordar do dia. Agora soma os lançamentos de ajuste do dia e **só mexe se a soma
+  explicar exatamente o `day.adj`**; caso duvidoso fica intocado. (Na conta do Rafael havia um só, e
+  a correção já rodou no jogo — flag `fixAdj0` gravada, `day.adj = 0`, Diário sem ajustes.)
+- **`LinkTier` passou a custar caro e era chamado 3× por avaliação** (consequência da v1.34.5).
+  Antes ele desistia num `gmatch`; agora quebra o link em campos. `EvalAgainst` o chamava 1× na
+  entrada e 2× na linha do `sameUpgrade`. Agora calcula `myTier` uma vez.
+- **`sameUpgrade` saiu do `a and b or c`.** A expressão era
+  `same and (LinkTier(..) or BEST_TIER) < BEST_TIER and LinkTier(..) or nil` — funcionava, mas é
+  exatamente o padrão que já custou três erros neste addon (regra 2 do CLAUDE.md). Virou `if` explícito.
+  De quebra: o aviso em texto (Invest.lua, `"mesma peça que você usa, refeita em ..."`) já esperava
+  `sameUpgrade` como número de qualidade desde sempre — ou seja, **aquele aviso nunca apareceu** antes
+  da v1.34.5, o que confirma o diagnóstico.
+- **`FindCandidates` retestava o mesmo itemID sem parar.** O `seen[id]` só era marcado para peça da
+  profissão; item que não é peça caía no `C_Item.GetItemInfoInstant` **em cada linha de receita que o
+  mencionasse**, e as receitas repetem muito o mesmo item de saída. Agora há um `notGear[profName]`
+  que guarda a rejeição (só quando o cliente já sabe o `equipLoc`, para não cravar item sem dados).
+- **`ToolStatOptions` para nas 3 opções** (só existem 3 stats). Já tinha entrado na v1.34.5; aqui só
+  registrando, porque o custo de até 101 tooltips por ferramenta ficou escondido enquanto o
+  `BuildCraftedLink` devolvia nil sempre.
+- Teste: t104.lua ganhou dois casos — dia com **dois** lançamentos somando o total (remove os dois) e
+  dia cujo Diário **não** explica o total (não toca em nada). O baseline v1.34.5 falha nos dois.
+
+### Ressalva conhecida (não mexi)
+`BuildCraftedLink` monta o link do candidato a partir do link da peça equipada e troca só o itemID e a
+qualidade — o modificador 40, que é por item, continua sendo o do modelo. É o desenho original e só
+vale como reserva (o `CraftedStats` prefere sempre o `outLink` que o jogo devolve). Para confirmar se
+isso distorce algum tooltip precisa de teste no jogo.

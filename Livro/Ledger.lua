@@ -1746,16 +1746,22 @@ function Ledger.FixAdj0()
 				local com = DayMv(day)
 				local sem = com - adj
 				if math.abs(real - sem) < TOL and math.abs(real - com) >= TOL then
-					day.adj = 0
-					local J = c.journal or {}
+					-- day.adj acumula (d.adj + diff), então pode haver mais de um lançamento no dia:
+					-- só mexe se os lançamentos do Diário somarem exatamente o que o dia guarda.
+					local J, mine, soma = c.journal or {}, {}, 0
 					for i = #J, 1, -1 do
 						local e = J[i]
-						if e.a == Ledger.ADJ_CODE and e.v == adj and root.DayKey(e.t) == dk then
-							table.remove(J, i)
+						if e.a == Ledger.ADJ_CODE and root.DayKey(e.t) == dk then
+							table.insert(mine, i)
+							soma = soma + (e.v or 0)
 						end
 					end
-					print("|cffd4af37Royal Revenue|r: " .. string.format(
-						L["ajuste de conciliação indevido removido (%s, %s): %s"], ck, dk, ns.P.FormatMoney(adj)))
+					if math.abs(soma - adj) < 1 then
+						for _, i in ipairs(mine) do table.remove(J, i) end   -- mine está em ordem decrescente
+						day.adj = 0
+						print("|cffd4af37Royal Revenue|r: " .. string.format(
+							L["ajuste de conciliação indevido removido (%s, %s): %s"], ck, dk, ns.P.FormatMoney(adj)))
+					end
 				end
 			end
 		end

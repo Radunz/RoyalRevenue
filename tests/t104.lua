@@ -23,6 +23,24 @@ LucroLivroDB.chars["Fake2-Teste"] = {
 		adj = LEGIT, cashOpen = 1000000, cashClose = 6000000, time = {}, v2 = true } },
 }
 
+-- dois ajustes no mesmo dia: day.adj acumula, e os dois lançamentos somam o total
+LucroLivroDB.chars["Fake3-Teste"] = {
+	class = "MAGE", journal = {
+		{ t = 1791571290, a = Led.ADJ_CODE, h = "sessao nao salva 1", v = 2000000, c = 1 },
+		{ t = 1791571291, a = Led.ADJ_CODE, h = "sessao nao salva 2", v = 3000000, c = 1 },
+	},
+	days = { ["2026-10-09"] = { act = {}, inc = {}, out = { ahdep = 100000 }, xin = 0, xout = 0,
+		adj = SPUR, cashOpen = 1000000, cashClose = 900000, time = {}, v2 = true } },
+}
+-- o Diário não explica o total do dia (falta um lançamento): não mexe em nada
+LucroLivroDB.chars["Fake4-Teste"] = {
+	class = "MAGE", journal = {
+		{ t = 1791571290, a = Led.ADJ_CODE, h = "sessao nao salva", v = 2000000, c = 1 },
+	},
+	days = { ["2026-10-09"] = { act = {}, inc = {}, out = { ahdep = 100000 }, xin = 0, xout = 0,
+		adj = SPUR, cashOpen = 1000000, cashClose = 900000, time = {}, v2 = true } },
+}
+
 local function conc(char)                          -- a mesma conta da aba (Livro/UI.lua:548)
 	local data = Led.Collect(nil)
 	for _, t in ipairs(data.chars) do
@@ -36,7 +54,7 @@ local function conc(char)                          -- a mesma conta da aba (Livr
 end
 
 local function estado(tag)
-	for _, ch in ipairs({ "Fake1-Teste", "Fake2-Teste" }) do
+	for _, ch in ipairs({ "Fake1-Teste", "Fake2-Teste", "Fake3-Teste", "Fake4-Teste" }) do
 		local c = LucroLivroDB.chars[ch]
 		local n = 0
 		for _, e in ipairs(c.journal) do if e.a == Led.ADJ_CODE then n = n + 1 end end
@@ -62,10 +80,21 @@ LucroLivroDB.chars["Fake2-Teste"].days["2026-10-09"].adj = LEGIT
 Led.FixAdj0()
 print("  Fake2 dia.adj depois da 2a chamada: " .. G(LucroLivroDB.chars["Fake2-Teste"].days["2026-10-09"].adj))
 
-local d1, d2 = conc("Fake1-Teste"), conc("Fake2-Teste")
-local n2 = 0
-for _, e in ipairs(LucroLivroDB.chars["Fake2-Teste"].journal) do if e.a == Led.ADJ_CODE then n2 = n2 + 1 end end
+local function nadj(ch)
+	local n = 0
+	for _, e in ipairs(LucroLivroDB.chars[ch].journal) do if e.a == Led.ADJ_CODE then n = n + 1 end end
+	return n
+end
+local d1, d2, d3 = conc("Fake1-Teste"), conc("Fake2-Teste"), conc("Fake3-Teste")
+local f4 = LucroLivroDB.chars["Fake4-Teste"].days["2026-10-09"]
 print("")
-print((math.abs(d1) < 10000 and math.abs(d2) < 10000 and n2 == 1)
-	and "OK: ajuste indevido removido, legitimo intacto, as duas contas conciliadas"
-	or string.format("FALHA (fake1=%s fake2=%s lancLegitimo=%d)", G(d1), G(d2), n2))
+print("  Fake3 (dois lancamentos somando o total): removidos os dois = " .. tostring(nadj("Fake3-Teste") == 0))
+print("  Fake4 (Diario nao explica o total): intacto = "
+	.. tostring(f4.adj == SPUR and nadj("Fake4-Teste") == 1))
+local ok = math.abs(d1) < 10000 and math.abs(d2) < 10000 and math.abs(d3) < 10000
+	and nadj("Fake2-Teste") == 1 and nadj("Fake3-Teste") == 0
+	and f4.adj == SPUR and nadj("Fake4-Teste") == 1
+print("")
+print(ok and "OK: indevido removido (1 ou N lancamentos), legitimo intacto, caso duvidoso nao tocado"
+	or string.format("FALHA (f1=%s f2=%s f3=%s legit=%d f3n=%d f4adj=%s f4n=%d)",
+		G(d1), G(d2), G(d3), nadj("Fake2-Teste"), nadj("Fake3-Teste"), G(f4.adj), nadj("Fake4-Teste")))

@@ -353,8 +353,13 @@ local function CraftedStats(c, templateLinks, profName)
 end
 
 -- ===== Candidatos: peças da profissão que algum personagem seu fabrica =====
+-- itemID que não é peça desta profissão: guardado para não repetir o GetItemInfoInstant em cada
+-- linha que o mencione (as receitas repetem muito o mesmo item de saída)
+local notGear = {}
 local function FindCandidates(profName)
 	local out, seen = {}, {}
+	local reject = notGear[profName or ""] or {}
+	notGear[profName or ""] = reject
 	for char, entries in pairs(LucroCraftDB.chars or {}) do
 		for _, e in pairs(entries) do
 			-- receitas conhecidas e as ainda não aprendidas (a versão épica pode estar só nas desconhecidas)
@@ -373,7 +378,7 @@ local function FindCandidates(profName)
 						c0.craftCost, c0.crafter, c0.craftMissing = r.cost, char:match("^[^-]+"), nil
 					end
 				end
-				if id and not seen[id] then
+				if id and not seen[id] and not reject[id] then
 					local _, _, subType, equipLoc, _, classID = C_Item.GetItemInfoInstant(id)
 					if (equipLoc == "INVTYPE_PROFESSION_TOOL" or equipLoc == "INVTYPE_PROFESSION_GEAR")
 						and subType and profName and subType == profName then
@@ -400,6 +405,9 @@ local function FindCandidates(profName)
 						}
 						seen[id] = cand
 						table.insert(out, cand)
+					elseif equipLoc then
+						-- o cliente já sabe o que é o item e não é peça desta profissão: não volta aqui
+						reject[id] = true
 					end
 				end
 			end
@@ -887,9 +895,12 @@ function Invest.Evaluate(entry, prof)
 	local profName = prof.parentProfessionName or entry.name
 	local function EvalAgainst(c, g)
 		local same = g and g.itemID and g.itemID == c.itemID
+		-- qualidade da peça equipada, uma vez só: o LinkTier quebra o link em campos
+		local myTier
+		if same then myTier = LinkTier(g.link) end
 		-- mesma peça: só interessa se a sua está abaixo da qualidade máxima
 		-- (ferramenta: sempre avalia, porque dá para refazer com outro stat)
-		if same and c.kind ~= "tool" and (LinkTier(g.link) or BEST_TIER) >= BEST_TIER then return nil end
+		if same and c.kind ~= "tool" and (myTier or BEST_TIER) >= BEST_TIER then return nil end
 		-- modelo: o item equipado neste slot; para acessório, o outro acessório também serve
 		local templates = {}
 		if g and g.link then table.insert(templates, g.link) end
@@ -920,8 +931,11 @@ function Invest.Evaluate(entry, prof)
 		end
 		local d = Delta(stats, cur)
 		local v, info = WeeklyValue(entry, d)
+		-- a sua peça abaixo da máxima: guarda a qualidade de hoje para o aviso "refeita na Q5"
+		local sameUp
+		if same and myTier and myTier < BEST_TIER then sameUp = myTier end
 		local res = { gain = v - base, delta = d, newNatural = {}, stats = stats, crafted = known,
-			sameUpgrade = same and (LinkTier(g.link) or BEST_TIER) < BEST_TIER and LinkTier(g.link) or nil,
+			sameUpgrade = sameUp,
 			same = same or nil }
 		for _, n in ipairs(info.natural) do
 			if not had[n.row.recipeID] then table.insert(res.newNatural, { name = n.row.name, gain = n.gain, spd = n.row.concSpd }) end
