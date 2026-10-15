@@ -1018,3 +1018,38 @@ para mim dar quase 900g com somente 382 de concentração."
 - `Liquid Luster`, a melhor por ouro/ponto (4,25g), continua cortada: o Q2 dela gira 1.308/dia, que
   é 0,42% da profissão. Baixar `recoMinShare` de 1% para 0,3% a liberaria e o plano iria a 1.111,66g.
   É decisão de configuração do Rafael; não mudei o padrão.
+
+## v1.36.0 — infraestrutura de teste (ideia 4) e duas falhas de UI que ela achou
+Primeiro bloco da lista de melhorias. O objetivo era parar de achar bug de UI por acidente — e já
+na primeira execução ele achou dois.
+
+- **`tests/geom.lua` + `t110.lua`: geometria de UI testável.** Os seis harnesses passaram a gravar
+  `SetPoint` (`Widget:SetPoint`, `:ClearAllPoints`, `:Rect()`). Sem isso nenhum teste conseguia
+  afirmar onde um widget estava — foi por isso que a sobreposição do nome do item sobre a coluna
+  Custo (v1.35.1) só apareceu por acaso. `t110` varre **todas as abas** procurando o que é
+  inequívoco: widget desenhado fora da largura do canvas, e coluna que invade a seguinte.
+  - Texto com largura 0 **não** é defeito (`Canvas:Text` faz `SetWidth(width or 0)` e no WoW isso é
+    "largura natural"), então a extensão desses é estimada pelo texto, não tratada como zero.
+  - Sobreposição horizontal entre textos também ficou de fora: o canvas desenha rótulo-à-esquerda e
+    valor-à-direita na mesma faixa de propósito, e qualquer regra genérica daria dezenas de falsos
+    positivos.
+- **Falhas achadas pelo t110:**
+  - `Craft/Sell.lua`: o rótulo de data do gráfico de preço é centrado em `X(dn) - 22` com largura 44;
+    no último dia da série o ponto fica na borda e metade do rótulo saía da janela. Agora é preso
+    dentro do canvas.
+  - `Craft/Queue.lua` `OrderCols`: em janela estreita demais para os mínimos, as posições (calculadas
+    da direita para a esquerda) ficavam **negativas** e as colunas se invertiam. Agora os mínimos
+    encolhem na proporção. A aba exige 700px, então é defesa — mas a função não pode devolver
+    geometria impossível.
+- **`tools/loccheck.py` + `check.sh`**: confere a regra 3 (toda chave `L["..."]` precisa de EN) e
+  chaves duplicadas. Achou **8 chaves duplicadas**, uma delas (`"Ganho por semana"`) com **traduções
+  EN diferentes** — a segunda vencia em silêncio. As 8 foram removidas mantendo a última ocorrência,
+  que é a que o Lua já usava, então nada muda em tela. O acumulado de 241 chaves sem EN no módulo
+  Craft continua lá e por isso o check só relata; com ele zerado, `--strict` passa a derrubar.
+- **`tests/diff.sh`**: normaliza o ruído que era filtrado à mão a cada rodada (endereço de tabela,
+  caminho do addon entre base e nova, caminho do interpretador no erro). Na prática: **8 arquivos
+  "diferentes" viraram 2**, e os 2 são diferença de verdade.
+- **`tests/legacy/`**: os 32 testes que terminavam em erro desde que a funcionalidade deles mudou
+  saíram da rodada normal. A suíte passou a ser **78 testes com zero falhas** — antes era
+  "110 arquivos, 32 quebrados, ignore esses". `./run_all.sh ../ out --legacy` traz de volta.
+- `CLAUDE.md` atualizado com a estrutura nova.

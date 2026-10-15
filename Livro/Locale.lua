@@ -81,7 +81,6 @@ local T = {
 	["Material comprado na casa de leilões (estoque)"] = "Materials bought on the auction house (stock)",
 	["Material comprado no vendedor (estoque)"] = "Materials bought from vendors (stock)",
 	["Compras para uso"] = "Purchases for use",
-	["Consumíveis usados"] = "Consumables used",
 	["Gear Upgrade"] = "Gear Upgrade",
 	["Material gasto em pedidos de fabricação"] = "Materials used in crafting orders",
 	["Material gasto na fabricação própria"] = "Materials used in own crafting",

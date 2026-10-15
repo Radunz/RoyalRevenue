@@ -38,7 +38,7 @@ Media/icon.tga
 docs/CHANGELOG.md      decisões e mudanças versão a versão (v1.1 → atual)
 docs/CURSEFORGE.md     texto da página do CurseForge (PT e EN)
 tests/                 harness com API do WoW simulada + testes de regressão
-tools/                 check.sh (sintaxe), build.sh (zip local), reclass_gen.lua (gerador do Livro/Reclass.lua)
+tools/                 check.sh (sintaxe + locale), loccheck.py (traduções), build.sh (zip local), reclass_gen.lua
 .github/workflows/     release.yml: tag vX.Y.Z → empacota, publica no CurseForge e cria release no GitHub
 ```
 Pra instalar no jogo, copia-se só `RoyalRevenue.toc`, `Brand.lua`, `Shell.lua`, `Craft/`,
@@ -127,7 +127,7 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 - `tests/harness*.lua` simulam a API do WoW, carregam um SavedVariables real de `tests/fixtures/` e todos os arquivos na ordem do `.toc`, e disparam ADDON_LOADED / PLAYER_LOGIN / PLAYER_ENTERING_WORLD.
   - `FIRE(evento, ...)` dispara um evento; cada FIRE é um quadro novo (`GetTime` +0,0001).
   - `RUNTIMERS()` roda os `C_Timer.After` pendentes.
-- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t94.lua**).
+- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t111.lua**).
 - **Os testes são de regressão por diff, não de passa/falha.** Fluxo para qualquer mudança:
   ```bash
   cp -r RoyalRevenue baseline/RoyalRevenue          # antes de mexer (ou extrair o zip da versão anterior)
@@ -137,7 +137,17 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
   ```
   Toda diferença precisa ser explicada (esperada pela mudança) antes de lançar.
 - **Atenção à data**: vários testes dependem do dia de hoje (períodos do Livro, concentração que enche com o tempo). Rode a base e a versão nova no mesmo dia/sessão.
-- **Testes velhos** já terminam em erro, por causa de funcionalidades que mudaram depois: t2–t26 (exceto alguns), t47, t48, t50, t54, t71, t72, t79. Eles valem só como diff.
+- **`tests/legacy/`**: os 32 testes de funcionalidade que mudou depois deles (t2–t26, t47, t48, t50,
+  t54, t71, t72, t79). Ficam FORA da rodada normal, que hoje é **78 testes com zero falhas** — antes
+  eles inflavam a contagem e o ruído. `./run_all.sh ../ out --legacy` traz de volta.
+- **`tests/geom.lua`**: conferências de geometria de UI. Os harnesses gravam `SetPoint`
+  (`Widget:SetPoint`/`:Rect()`), então um teste consegue afirmar onde um widget está. `t110.lua` varre
+  todas as abas procurando o que é desenhado fora do canvas e colunas que invadem a seguinte — foi
+  assim que apareceram o rótulo do gráfico saindo da janela e o `OrderCols` com posição negativa.
+- **`tools/loccheck.py`**: confere a regra 3 (toda chave `L["..."]` precisa de EN) e chaves
+  duplicadas. O `check.sh` chama em modo relatório; `--strict` derruba o check e é o que se quer
+  quando o acumulado de chaves sem EN estiver zerado. Limite: só enxerga `L["literal"]`, não rótulo
+  passado por variável.
 - Mudança nova → criar um `tN.lua` focado que imprime os números relevantes. Exemplos: t89 (Diário intercalado), t92 (agendamento do scan), t93 (anúncio absurdo).
 - Perfil de desempenho: `lua5.1 prof.lua` (tempo de cada aba), `lua5.1 -e 'TARGET=9' prof2.lua` (perfil inclusivo de uma aba do Craft), `lua5.1 -e 'MODE="livro"; TAB=5' prof3.lua`.
 - **As fixtures são o SavedVariables real da conta do Rafael** (personagens, ouro, transações). Não publicar o repositório.

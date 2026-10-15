@@ -827,6 +827,16 @@ function Queue.OrderCols(QW)
 			w[k] = OCMIN[k] + ((flex > 0) and math.floor((w[k] - OCMIN[k]) * room / flex) or 0)
 		end
 	end
+	-- janela tão estreita que nem os mínimos cabem: encolhe todos na proporção, senão as posições
+	-- (calculadas da direita para a esquerda) ficam NEGATIVAS e as colunas se invertem. A aba exige
+	-- 700px, então isto é defesa — mas a função não pode devolver geometria impossível.
+	local espaco = QW - fixed - 8
+	local somaW = 0
+	for _, k in ipairs(OORDER) do somaW = somaW + w[k] end
+	if somaW > espaco and somaW > 0 then
+		local f = math.max(0, espaco) / somaW
+		for _, k in ipairs(OORDER) do w[k] = math.max(1, math.floor(w[k] * f)) end
+	end
 	local c = { w = w }
 	c.delW = ODEL
 	c.del = QW - 8 - ODEL

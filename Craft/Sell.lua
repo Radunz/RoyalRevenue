@@ -1003,7 +1003,10 @@ function Sell.DrawHistory(cv, y, W, m, refresh, key)
 	-- datas no eixo
 	local every = nDays <= 8 and 1 or nDays <= 16 and 2 or nDays <= 35 and 7 or 14
 	for dn = last, first, -every do
-		cv:Text(X(dn) - 22, y, "|cff9d9d9d" .. DateOf(dn) .. "|r", GameFontDisableSmall, 44, "CENTER")
+		-- rótulo centrado no ponto, mas preso dentro do canvas: no último dia da série o ponto fica
+		-- na borda e a metade direita do rótulo saía da janela (achado pelo t110)
+		local lx = math.max(0, math.min(X(dn) - 22, cv:Width() - 44))
+		cv:Text(lx, y, "|cff9d9d9d" .. DateOf(dn) .. "|r", GameFontDisableSmall, 44, "CENTER")
 	end
 	y = y + 16
 	cv:Text(LEFT, y, "|cff9d9d9d" .. L["Fundo verde = melhor dia para vender · linha branca vertical = hoje · passe o mouse num dia para ver os detalhes e as amostras com hora"] .. "|r", GameFontDisableSmall, cw)

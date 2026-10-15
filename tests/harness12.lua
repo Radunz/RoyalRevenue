@@ -46,6 +46,31 @@ Widget.__index = function(t, k)
 end
 function Widget:RegisterEvent(e) EVENTS[e] = EVENTS[e] or {}; table.insert(EVENTS[e], self) end
 function Widget:UnregisterEvent() end
+-- Posicao: o canvas do addon ancora tudo com SetPoint("TOPLEFT", pai, "TOPLEFT", x, -y), entao
+-- guardar o ultimo TOPLEFT da as coordenadas do canvas direto. Serve para os testes conferirem
+-- que uma coluna nao invade a outra.
+function Widget:SetPoint(point, a, b, c, d)
+	local x, y
+	if type(a) == "number" then x, y = a, b                 -- SetPoint(point, x, y)
+	elseif type(b) == "string" then x, y = c, d             -- SetPoint(point, relTo, relPoint, x, y)
+	else x, y = b, c end                                    -- SetPoint(point, relTo, x, y)
+	local pts = rawget(self, "_pts")
+	if not pts then pts = {}; rawset(self, "_pts", pts) end
+	table.insert(pts, { point = point, x = x, y = y })
+	if point == "TOPLEFT" and type(x) == "number" then
+		rawset(self, "_x", x)
+		if type(y) == "number" then rawset(self, "_y", -y) end
+	end
+end
+function Widget:ClearAllPoints()
+	rawset(self, "_pts", nil); rawset(self, "_x", nil); rawset(self, "_y", nil)
+end
+-- retangulo do widget em coordenadas do canvas (nil se nunca foi posicionado)
+function Widget:Rect()
+	local x, y = rawget(self, "_x"), rawget(self, "_y")
+	if not x or not y then return nil end
+	return x, y, x + (self._w or 0), y + (self._h or 0)
+end
 function Widget:SetScript(k, fn) self._scripts[k] = fn end
 function Widget:GetScript(k) return self._scripts[k] end
 function Widget:HookScript(k, fn) self._scripts[k] = fn end
