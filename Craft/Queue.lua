@@ -805,9 +805,9 @@ end
 -- Ordem: Item · Custo · Reagentes · Recompensa · Lucro · Tempo · Pegar pedido.
 -- A coluna Item tem um mínimo garantido: se o painel for estreito, as OUTRAS encolhem
 -- (proporcionalmente, até um mínimo próprio) em vez de passar por cima do nome.
-local OCOL  = { cost = 76, reag = 132, reward = 118, profit = 84, time = 50, claim = 104 }
-local OCMIN = { cost = 54, reag = 70,  reward = 54,  profit = 62, time = 34, claim = 72 }
-local OORDER = { "cost", "reag", "reward", "profit", "time", "claim" }
+local OCOL  = { cost = 76, reag = 132, conc = 44, reward = 118, profit = 84, time = 50, claim = 104 }
+local OCMIN = { cost = 54, reag = 70,  conc = 34, reward = 54,  profit = 62, time = 34, claim = 72 }
+local OORDER = { "cost", "reag", "conc", "reward", "profit", "time", "claim" }
 local OGAP, ITEM_MIN = 8, 170
 local ODEL = 20   -- coluna do "x" (excluir o pedido da lista), à direita do Pegar
 function Queue.OrderCols(QW)
@@ -830,10 +830,14 @@ function Queue.OrderCols(QW)
 	c.time = c.claim - OGAP - w.time
 	c.profit = c.time - OGAP - w.profit
 	c.reward = c.profit - OGAP - w.reward
-	c.reag = c.reward - OGAP - w.reag
+	c.conc = c.reward - OGAP - w.conc
+	c.reag = c.conc - OGAP - w.reag
 	c.cost = c.reag - OGAP - w.cost
 	c.item = 8
-	c.itemW = math.max(60, c.cost - OGAP - c.item)   -- nunca invade a coluna Custo
+	-- nunca invade a coluna Custo: o piso de 60 era aplicado mesmo quando não cabia, e aí o nome
+	-- passava por cima do Custo em janela estreita. Sem espaço, o nome encolhe (o 1 evita largura 0,
+	-- que no WoW significa "sem limite" e deixaria o texto transbordar).
+	c.itemW = math.max(1, c.cost - OGAP - c.item)
 	return c
 end
 -- comissão líquida + recompensas (o que o pedido paga)
@@ -844,6 +848,8 @@ local OSORT = {
 	reward = OrderReward,
 	profit = function(x) return x.profit or 0 end,
 	time = function(x) return x.exp or (x.order and x.order.expirationTime) or math.huge end,
+	-- opcional não entra: o pedido aceita a qualidade de baixo, então não custa concentração de verdade
+	conc = function(x) if x.concOpt then return 0 end return x.concPts or 0 end,
 }
 function Queue.OrderSort()
 	local s = LucroCraftDB.config and LucroCraftDB.config.orderSort
@@ -1278,6 +1284,7 @@ function Queue.Render(cv)
 		OHead(OC.item, OC.itemW, "item", "Item")
 		OHead(OC.cost, OC.w.cost, "cost", "Custo", "RIGHT")
 		qc:Text(OC.reag, ly + 2, "|cffd4af37" .. L["Reagentes"] .. "|r", GameFontNormalSmall, OC.w.reag)
+		OHead(OC.conc, OC.w.conc, "conc", "Conc", "CENTER")
 		OHead(OC.reward, OC.w.reward, "reward", "Recompensa")
 		OHead(OC.profit, OC.w.profit, "profit", "Lucro", "RIGHT")
 		OHead(OC.time, OC.w.time, "time", "Tempo", "RIGHT")
@@ -1431,19 +1438,25 @@ function Queue.Render(cv)
 					gx = gx + 26
 				end
 			end
-			-- concentração entra como reagente só quando é OBRIGATÓRIA para a qualidade mínima;
-			-- a opcional (o pedido aceita a qualidade de baixo) fica só no tooltip do item
-			if x.concPts and not x.concOpt and gx <= gmax then
+
+			-- ===== Concentração: coluna própria =====
+			-- Antes ela disputava espaço com os reagentes na mesma faixa (`gx <= gmax`), então num pedido
+			-- com muitos reagentes o ícone simplesmente não era desenhado — sumia a informação que mais
+			-- pesa na decisão. E a opcional nunca aparecia na tabela, só no tooltip do item.
+			if x.concPts and x.concPts > 0 then
 				-- profissão escaneada sem dados de concentração não tem e.conc
 				local est
 				if x.e and x.e.conc and ns.Plan and ns.Plan.EstimatedConc then
 					local okE, v = pcall(ns.Plan.EstimatedConc, x.e)
 					if okE then est = v end
 				end
-				local faltaC = est and est < x.concPts
-				qc:Icon(gx, ly + 5, 22, ns.ConcTexture(x.e and x.e.professionID) or 134400,
+				-- opcional não é falta: o pedido aceita a qualidade de baixo e o lucro não desconta
+				local faltaC = (not x.concOpt) and est and est < x.concPts
+				local cx0 = OC.conc + math.floor((OC.w.conc - 22) / 2)
+				qc:Icon(cx0, ly + 5, 22, ns.ConcTexture(x.e and x.e.professionID) or 134400,
 					{ count = root.Num(x.concPts, 0), countColor = faltaC and { 1, 0.3, 0.3 } or nil,
-					  border = { 0.4, 0.8, 1 }, tip = function(tt)
+					  -- obrigatória em azul; opcional em cinza, para distinguir sem precisar do tooltip
+					  border = x.concOpt and { 0.5, 0.5, 0.5 } or { 0.4, 0.8, 1 }, tip = function(tt)
 						tt:SetText(L["Concentração"])
 						tt:AddDoubleLine(L["Precisa"], root.Num(x.concPts, 0) .. (x.concEst and " (~)" or ""), 1, 0.82, 0, 1, 1, 1)
 						if x.concEst then
@@ -1452,9 +1465,12 @@ function Queue.Render(cv)
 						if est then tt:AddDoubleLine(L["Tem"], root.Num(math.floor(est), 0), 1, 0.82, 0, faltaC and 1 or 0.3, faltaC and 0.3 or 1, 0.3) end
 						if x.concOpt then
 							tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
+						else
+							tt:AddDoubleLine(L["Desconta do lucro"], P.FormatMoney(x.concValue or 0), 1, 0.82, 0, 0.9, 0.5, 0.5)
 						end
 					end })
-				gx = gx + 26
+			else
+				qc:Text(OC.conc, ly + 9, "|cff5a5a5a-|r", GameFontDisableSmall, OC.w.conc, "CENTER")
 			end
 
 			-- Tempo restante

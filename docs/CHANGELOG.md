@@ -891,3 +891,41 @@ necessidade de fazer".
 `Buy.lua` (44), `Sell.lua` (41), `RecipeShop.lua` (27), `SecondProf.lua` (17), `UI.lua` (2) e outras.
 É anterior a esta versão e contraria a regra 3 do CLAUDE.md. O `Livro` está completo (0 faltando), e as
 12 chaves novas desta versão têm EN.
+
+## v1.35.1 — concentração com coluna própria na tabela de pedidos (pedido do Rafael)
+Pedido: "separa o uso de concentração da lista de reagentes, agora que tem espaço de uma coluna
+própria para a concentração". O espaço veio da v1.35.0, que empilhou a lista de compras e devolveu a
+largura cheia para a fila.
+
+- Nova coluna **Conc**, entre Reagentes e Recompensa: `OCOL/OCMIN/OORDER` ganham `conc` (44px, mín. 34)
+  e o `Queue.OrderCols` a posiciona na cadeia da direita para a esquerda.
+- **Dois defeitos reais que o formato antigo escondia:**
+  - a concentração era desenhada *dentro* da faixa de reagentes, sob a condição `gx <= gmax`. Num
+    pedido com muitos reagentes o ícone simplesmente **não saía** — some justamente o número que mais
+    pesa na decisão de pegar ou não o pedido. No teste, com 12 reagentes só 6 ícones cabem; agora a
+    concentração aparece sempre, porque não disputa mais o espaço.
+  - a concentração **opcional** nunca aparecia na tabela (a condição era `not x.concOpt`), só no
+    tooltip do item. Agora aparece, com borda cinza em vez de azul para distinguir da obrigatória
+    sem precisar passar o mouse.
+- **Coluna ordenável** (`OSORT.conc`), como as outras: clicar no título ordena. A opcional conta como
+  0, porque o pedido aceita a qualidade de baixo e ela não desconta do lucro — ordenar por "quanto
+  custa de concentração" tem de ignorar o que não custa.
+- Tooltip da obrigatória passou a mostrar "Desconta do lucro" com o valor, que antes só existia no
+  tooltip do item.
+- Pedido sem concentração mostra "-" em cinza, para a coluna não ficar ambígua entre "não usa" e
+  "não calculado".
+- **Correção de borda encontrada no caminho:** `c.itemW` usava `math.max(60, c.cost - OGAP - c.item)`.
+  O piso de 60 era aplicado mesmo quando não havia 60px, e aí o nome do item passava **por cima** da
+  coluna Custo. Virou `math.max(1, ...)`: sem espaço o nome encolhe em vez de sobrepor (o 1 evita
+  largura 0, que no WoW significa "sem limite" e deixaria o texto transbordar). Era condição anterior
+  — a coluna nova só antecipou o aperto, e aparecia abaixo de ~600px.
+- Locale: `Conc` e `Desconta do lucro` (as duas com EN; os outros títulos da tabela já tinham).
+- Teste: t107.lua (geometria sem sobreposição em 1200/946/750/520; ordenação com a opcional valendo 0;
+  e a prova central — com 2 e com 12 reagentes, a concentração obrigatória **e** a opcional sempre
+  somam exatamente 1 ícone). Falha na v1.35.0.
+- Muda de propósito: `t99` (colunas deslocadas, 8 OK / 0 FALHA), `t52` (12 → 13 ícones: a
+  concentração que antes era descartada) e `t106` (posição do Pegar a 750px).
+
+### Anotação
+`Craft/Locale.lua` tem `["Lucro"] = "Profit"` duplicada (linhas 275 e 1007), com o mesmo valor. É
+inofensivo (a segunda sobrescreve a primeira com o mesmo texto) e não mexi.
