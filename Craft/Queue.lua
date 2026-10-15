@@ -480,6 +480,7 @@ end
 -- e permite pegar (reivindicar) o pedido pelo botão.
 Queue.orders = {}
 local ORDER_TYPE = { [0] = L["Público"], [1] = L["Guilda"], [2] = L["Pessoal"], [3] = L["Patrono"] }
+local NPC_ORDER = 3   -- Patrono: o cliente é um NPC (confirmado nos 8 pedidos reais do SavedVariables)
 
 local function MyRow(recipeID)
 	local me = ns.CharKey()
@@ -525,7 +526,9 @@ end
 local function Eval(o)
 	local r, e = MyRow(o.spellID)
 	local x = { order = o, row = r, e = e, id = o.orderID, type = ORDER_TYPE[o.orderType] or "?", customer = o.customerName,
-		tip = o.tipAmount or 0, cut = o.consortiumCut or 0, exp = o.expirationTime, minQ = o.minQuality }
+		tip = o.tipAmount or 0, cut = o.consortiumCut or 0, exp = o.expirationTime, minQ = o.minQuality,
+		-- pedido de NPC: a qualidade pedida é o alvo. De jogador: sempre vale buscar a máxima.
+		npc = o.orderType == NPC_ORDER }
 	-- reagentes que o cliente/patrono já mandou
 	local given, custR = {}, {}
 	for _, rg in ipairs(o.reagents or {}) do
@@ -566,6 +569,7 @@ local function Eval(o)
 			icon = icon })
 	end
 	x.mat, x.miss, x.rew, x.rewList, x.kp = mat, miss, rew, rewList, kp
+	if #rewList > 0 then x.npc = true end   -- reserva: só patrono paga recompensa em item/moeda
 	x.profit = x.tip - x.cut + rew - mat
 	-- concentração do pedido: mostra os pontos sempre que a receita puder usar.
 	-- Só desconta do lucro quando ela é OBRIGATÓRIA para a qualidade mínima (x.concOpt = opcional).
@@ -653,7 +657,7 @@ function Queue.ClaimOrder(x)
 		local given = {}
 		for id in pairs(x.given or {}) do given[id] = true end
 		q.claimed[x.id] = { id = x.id, recipeID = x.row and x.row.recipeID or x.order.spellID, char = ns.CharKey(),
-			prof = x.e and x.e.professionID, profEnum = prof, type = x.type, customer = x.customer, tip = x.tip, cut = x.cut,
+			prof = x.e and x.e.professionID, profEnum = prof, type = x.type, npc = x.npc, customer = x.customer, tip = x.tip, cut = x.cut,
 			rew = x.rew, profit = x.profit, given = given, t = time(), exp = x.exp, minQ = x.minQ,
 			concPts = x.concPts, concValue = x.concValue, concFrom = x.concFrom, custR = x.custR }
 		for i, y in ipairs(Queue.orders) do if y.id == x.id then table.remove(Queue.orders, i) break end end
@@ -914,18 +918,25 @@ function Queue.ShortTime(s)
 end
 
 -- concentração do pedido (preenche x.concPts, x.concValue, x.concOpt, x.unreach)
--- Mostra o custo SEMPRE que a receita puder usar concentração, não só quando ela é obrigatória
--- para a qualidade mínima: com minQuality 1 o pedido aceita a qualidade de baixo, mas a receita
--- continua tendo custo de concentração (é o que o jogo e o CraftSim mostram). x.concOpt marca
--- que é opcional — nesse caso o lucro não desconta os pontos (você escolhe se gasta).
+-- O alvo de qualidade depende de QUEM pede:
+--   NPC (Patrono): o alvo é a qualidade que ele pediu. Alcançando-a sem concentração, não há nada a
+--     mostrar — o NPC paga igual, então gastar pontos para passar do pedido é desperdício.
+--   Jogador (Público/Guilda/Pessoal): o alvo é sempre a qualidade máxima, então o custo de subir
+--     aparece como OPCIONAL mesmo quando a qualidade pedida já está alcançada.
+-- x.concOpt marca o caso opcional — aí o lucro não desconta os pontos (você escolhe se gasta).
 local function OrderConc(x, c)
 	c.row = c.row or x.row   -- o OrderPlan usa o scan como reserva quando a API não responde
 	local okP, conc, cost, q0, q1, reach, est = pcall(Queue.OrderPlan, c)
 	if not okP then return end
 	if conc and not reach then x.unreach = true; x.q0 = q0 return end
 	x.q0, x.q1, x.concEst = q0, q1, est or nil
-	if not conc then
-		-- não é obrigatória: pega o custo da receita escaneada (subir 1 qualidade)
+	-- de quem é o pedido: o registro do pedido pego manda (ele guarda a marca), senão o x
+	local isNpc = x.npc
+	if c.npc ~= nil then isNpc = c.npc end
+	-- pedido pego antes desta versão não tem a marca: cai no tipo guardado
+	if isNpc == nil and c.type then isNpc = (c.type == L["Patrono"]) end
+	if not conc and not isNpc then
+		-- jogador: vale subir até a máxima, então mostra o custo de subir 1 qualidade (o que a API dá)
 		local r = x.row
 		if r and r.concCost and r.concCost > 0 and (r.quality or 0) < (r.maxQuality or 0) then
 			cost, conc, x.concOpt = r.concCost, true, true
@@ -1464,9 +1475,12 @@ function Queue.Render(cv)
 						end
 						if est then tt:AddDoubleLine(L["Tem"], root.Num(math.floor(est), 0), 1, 0.82, 0, faltaC and 1 or 0.3, faltaC and 0.3 or 1, 0.3) end
 						if x.concOpt then
+							tt:AddLine(L["Pedido de jogador: vale subir até a qualidade máxima."], 0.4, 0.8, 1, true)
 							tt:AddLine(L["   Opcional: o pedido aceita a qualidade de baixo, então o lucro acima NÃO desconta esses pontos."], 0.6, 0.6, 0.6, true)
 						else
 							tt:AddDoubleLine(L["Desconta do lucro"], P.FormatMoney(x.concValue or 0), 1, 0.82, 0, 0.9, 0.5, 0.5)
+							tt:AddLine(string.format(L["Obrigatória para chegar na qualidade %s que o pedido exige."],
+								ns.QIcon(x.minQ or 0, 5)), 0.6, 0.6, 0.6, true)
 						end
 					end })
 			else

@@ -929,3 +929,39 @@ largura cheia para a fila.
 ### Anotação
 `Craft/Locale.lua` tem `["Lucro"] = "Profit"` duplicada (linhas 275 e 1007), com o mesmo valor. É
 inofensivo (a segunda sobrescreve a primeira com o mesmo texto) e não mexi.
+
+## v1.35.2 — alvo de qualidade por tipo de cliente: NPC para no pedido, jogador vai até a máxima
+Print do Rafael: um pedido de NPC pedia qualidade 4, o personagem já fazia qualidade 4 sem
+concentração, e o addon mostrava custo de concentração do mesmo jeito. Regra dele:
+"não é necessário usar concentração para atingir a qualidade pedida... porém essa regra somente é
+válida para ordens de NPC; de player sempre devemos tentar atingir a qualidade máxima".
+
+- Causa: `Queue.OrderPlan` **já acertava** — alcançando a qualidade pedida sem concentração, ele
+  devolve "não obrigatória". O problema era o fallback do `Queue.OrderConc`, que nesse caso oferecia
+  o custo de subir rumo à qualidade **máxima** e marcava como opcional (`x.concOpt`), sem olhar quem
+  pediu. Para NPC isso é desperdício: ele paga o mesmo pela qualidade que pediu.
+- O que mudou:
+  - `Eval` marca `x.npc`: `o.orderType == 3` (Patrono). Conferido nos 8 pedidos reais do
+    SavedVariables — todos `orderType=3`, com NPC nomeado e `npcOrderRewards`. Como reserva,
+    `#rewList > 0` também marca NPC, porque só patrono paga recompensa em item/moeda.
+  - `Queue.ClaimOrder` guarda `npc` no pedido pego, porque o `OrderConc` roda de novo na fila.
+  - `Queue.OrderConc` só aplica o fallback "subir até a máxima" quando **não** é NPC.
+  - Pedido pego antes desta versão não tem a marca: cai no `type` guardado (`== L["Patrono"]`).
+  - Tooltip explica a regra: "Pedido de jogador: vale subir até a qualidade máxima" no caso opcional,
+    e "Obrigatória para chegar na qualidade X que o pedido exige" no obrigatório.
+- Comportamento final (t108):
+
+  | quem pede | pede | personagem faz | resultado |
+  |---|---|---|---|
+  | NPC | q4 | q4 | **nada** (era 180 opcional) |
+  | NPC | q5 | q4 | 180 obrigatória |
+  | NPC | qualquer | q4 | **nada** (era 180 opcional) |
+  | jogador | q4 | q4 | 180 opcional |
+  | jogador | q5 | q4 | 180 obrigatória |
+  | jogador | qualquer | q4 | 180 opcional |
+
+- Teste: t108.lua (as 6 combinações acima + pedido antigo sem a marca, pelos dois tipos). Falha na
+  v1.35.1 com `npc4=180`, que é exatamente o print.
+- Muda de propósito, e serve de prova em dado que já existia: `t83` (pedido `orderType=3` pedindo q3
+  com o personagem fazendo q3: `conc 351` → `conc nil`) e `t52` (13 → 12 ícones, a concentração que
+  não precisa mais ser desenhada).
