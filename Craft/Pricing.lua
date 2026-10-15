@@ -21,6 +21,10 @@ ns.DEFAULTS = {
 	minSoldPerDay = 1,   -- abaixo disso a receita é marcada como "pouca venda"
 	volumeMinSpd = 10,   -- lista de receitas: lucrativa com pelo menos isto de vendas/dia = seção "Volume"
 	useStats = true,     -- considera multicraft / resourcefulness / ingenuity
+	trendDiscount = true,   -- desconta a tendência de QUEDA do preço na projeção de lucro
+	capByMarket = true,     -- limita os crafts do plano ao que o mercado absorve
+	absorbDays = 7,         -- horizonte de venda considerado (dias)
+	absorbShare = 0.05,     -- fatia do giro da região que você consegue tomar
 	useCrafted = true,   -- usa custo de fabricar reagentes quando for mais barato que comprar
 	recoMinABC = "B",    -- recomendações só para itens classe A e B (C = vende pouco)
 	recoMinShare = 0.01, -- e com pelo menos 1% das vendas/dia da profissão (/lucro giro <%>)
@@ -157,7 +161,39 @@ end
 
 local function TSMValue(priceStr, itemID) return root.TSMPrice(priceStr, "i:" .. itemID) end
 
-local function AuctionatorValue(itemID) return root.AtrPrice(itemID) end
+-- ===== preço fora de escala =====
+-- Medido no SavedVariables real: o Auctionator traz valor absurdo em 8 de 5.555 itens — o 241307
+-- a 17.000,84g contra 5,02g do TSM (3.386x), o 268475 a 26.535g (41x). Com o TSM configurado como
+-- fonte nada acontece, mas com o Auctionator na frente isso vira lucro fantasioso no plano e na
+-- curva ABC, e o número sai errado sem nenhum sinal. Quando dá para comparar com o TSM, um valor
+-- assim é descartado em vez de usado.
+Pricing.SANE_RATIO = 20
+local avisado = {}
+local function Sane(itemID, v, ref)
+	if not v or v <= 0 or not ref or ref <= 0 then return v end
+	local r = Pricing.SANE_RATIO
+	if v > ref * r or v * r < ref then
+		if not avisado[itemID] then
+			avisado[itemID] = true
+			-- Pricing.FormatMoney é definida mais abaixo neste arquivo; aqui só roda em tempo de execução
+			local F = Pricing.FormatMoney or tostring
+			if ns.Log then
+				ns.Log(string.format("preço descartado por estar fora de escala: item %s = %s (referência %s)",
+					tostring(itemID), F(v), F(ref)))
+			end
+		end
+		return nil
+	end
+	return v
+end
+Pricing._Sane = Sane
+
+local function AuctionatorValue(itemID)
+	local v = root.AtrPrice(itemID)
+	-- referência do TSM (já cacheada por 60 s); sem TSM não há com o que comparar e o valor passa
+	if v and Pricing.HasTSM() then v = Sane(itemID, v, TSMValue("DBMarket", itemID)) end
+	return v
+end
 
 local function OwnMin(itemID)
 	return ns.Own and ns.Own.Min(itemID) or nil

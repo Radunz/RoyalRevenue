@@ -909,7 +909,11 @@ function Invest.Evaluate(entry, prof)
 				if o and o ~= g and o.link then table.insert(templates, o.link) end
 			end
 		end
-		local cst, known = CraftedStats(c, templates, profName)
+		-- o 3º retorno é o link que realmente foi usado para ler os atributos: ou o outLink do scan,
+		-- ou um montado na qualidade máxima a partir da peça equipada. A tela precisa dele, senão
+		-- cai no SetItemByID, que mostra a peça na qualidade MAIS BAIXA (era o acessório 2 saindo
+		-- em ★2 enquanto o 1, que tinha outLink, saía certo).
+		local cst, known, usedLink = CraftedStats(c, templates, profName)
 		local stats = cst or c.stats
 		if known then c.craftedKnown = true end
 		if not known and not c.statsKnown then return nil end   -- sem stats: não dá para comparar
@@ -940,6 +944,7 @@ function Invest.Evaluate(entry, prof)
 		for _, n in ipairs(info.natural) do
 			if not had[n.row.recipeID] then table.insert(res.newNatural, { name = n.row.name, gain = n.gain, spd = n.row.concSpd }) end
 		end
+		res.link = usedLink or c.outLink
 		res.statChoice = statChoice and statChoice.label
 		res.allChoices = allChoices
 		if enchOpt then
@@ -1446,6 +1451,7 @@ Invest.GetText = Render
 -- usados pela versão visual (InvestView.lua)
 Invest._LinkTier = LinkTier
 Invest._BuildCraftedLink = BuildCraftedLink
+Invest._CraftedStats = CraftedStats
 Invest._CurrentEntry = CurrentEntry
 Invest._StatStr = StatStr
 Invest._StatsText = StatsText

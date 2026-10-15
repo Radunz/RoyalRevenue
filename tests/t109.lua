@@ -7,6 +7,10 @@ dofile("harness11.lua")
 local C = RR.Craft
 UnitName = function() return "Radunz" end; UnitFullName = function() return "Radunz", "Goldrinn" end
 for _, n in ipairs({ "Craft", "Livro" }) do local x = RR[n]; if x and x._ResetCharKey then x._ResetCharKey() end end
+-- v1.36.1: com o teto de absorção ligado o filtro de participação é dispensado de propósito (o teto
+-- responde a mesma pergunta melhor, em unidades). Este teste é sobre o filtro, então desliga o teto.
+LucroCraftDB.config = LucroCraftDB.config or {}
+LucroCraftDB.config.capByMarket = false
 
 -- duas receitas espelhadas: uma gira no item base, a outra no item de cima
 local function receita(nome, id, spd, concSpd)

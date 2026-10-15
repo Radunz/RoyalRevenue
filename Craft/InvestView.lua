@@ -103,16 +103,28 @@ local function FixRandomStat(tt, choice)
 	end
 end
 
+-- qualidade da peça que está sendo mostrada como melhoria. Preferir sempre o link de maior
+-- qualidade que temos: o do scan (outLink) ou o montado a partir da peça equipada (r.link).
+local function CandLink(c, r)
+	return (r and r.link) or c.outLink
+end
+local function CandTier(c, r)
+	local link = CandLink(c, r)
+	return link and Invest._LinkTier and Invest._LinkTier(link) or nil
+end
+
 local function CandTip(c, r)
 	return function(tt)
-		if c.outLink then tt:SetHyperlink(c.outLink) else tt:SetItemByID(c.itemID) end
+		local link = CandLink(c, r)
+		if link then tt:SetHyperlink(link) else tt:SetItemByID(c.itemID) end
 		FixRandomStat(tt, r.statChoice)
 		tt:AddLine(" ")
 		Line(tt, L["Ganho por semana"], P.FormatMoney(r.gain), { 0.3, 1, 0.3 })
 		Line(tt, L["Recupera em"], r.payback and string.format(L["%.1f semanas"], r.payback) or L["sem preço"])
 		Line(tt, L["Custo"], (c.price and P.FormatMoney(c.price) or "—") .. " (" .. (c.priceFrom or "?") .. ")")
+		local tier = CandTier(c, r)
 		Line(tt, L["Atributos"], Invest._StatStr(r.stats)
-			.. (r.crafted and (" (" .. ns.QIcon(5, 5) .. ")") or L[" (item base)"]))
+			.. (tier and (" (" .. ns.QIcon(tier, 5) .. ")") or L[" (item base)"]))
 		if r.statChoice then Line(tt, L["Fabricar com"], r.statChoice, { 0.4, 0.8, 1 }) end
 		for _, ch in ipairs(r.allChoices or {}) do
 			if ch.label ~= r.statChoice then Line(tt, "   " .. ch.label, P.FormatGold(ch.gain, true), GREY) end
@@ -702,11 +714,12 @@ function Invest.Render(cv)
 					if u.showcase then cv:Box(ux + 3, cy + 77, 40, 40, 0.64, 0.21, 0.93, 0.30) end
 					-- ferramenta: sigla do atributo a escolher na fabricação no canto do ícone
 					local badge = u.r.statChoice and u.r.statChoice:sub(1, 3):upper() or nil
+					-- a estrela é a qualidade REAL do link mostrado, não um 5 fixo: melhoria sem link
+					-- caía no item base e saía em ★2 (era o caso do acessório 2 do Saalla)
+					local cTier = CandTier(u.c, u.r)
 					cv:Icon(ux + 6, cy + 80, 34, V.ItemIcon(u.c.itemID), {
-						-- ★5 só quando os atributos saíram do link na qualidade máxima; senão são os do item
-						-- base e prometer ★5 era mentir (era fixo em 5 aqui)
-						rarity = rarity, quality = u.r.crafted and ns.QIcon(5, 5, 12) or nil,
-						link = u.c.outLink, tip = CandTip(u.c, u.r),
+						rarity = rarity, quality = cTier and ns.QIcon(cTier, 5, 12) or nil,
+						link = CandLink(u.c, u.r), tip = CandTip(u.c, u.r),
 						count = badge })
 					if u.showcase then
 						local gain = u.r.gain or 0

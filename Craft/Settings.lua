@@ -258,6 +258,8 @@ local function Create(parent)
 	Cycle(XL, y, L["Qualidade do item final:"], "outputQuality", { "auto", 1, 2, 3, 4, 5 }, true,
 		L["auto = a qualidade que a sua skill atinge. Um número força a qualidade."]); y = y - 26
 	Check(XL, y, L["Considerar multicraft / resourcefulness / ingenuity"], "useStats", true); y = y - 24
+	Check(XL, y, L["Descontar a tendência de queda do preço"], "trendDiscount", true,
+		L["O item é vendido ao longo de dias, não hoje: com o preço caindo, projetar pelo preço de hoje superestima o lucro sempre. Aplica metade da tendência (você vende aos poucos), com piso de -50%. Só desconta na QUEDA: deixar a alta inflar o plano seria recomendar craft por aposta de preço. Vale no próximo scan (abra a profissão)."]); y = y - 26
 	Check(XL, y, L["Usar custo de fabricar reagentes quando for mais barato"], "useCrafted", true); y = y - 24
 	Check(XL, y, L["Otimizar reagentes (qualidade de cima sem concentração)"], "optimizeReagents", true,
 		L["Testa trocar parte dos reagentes pela qualidade superior para a receita sair na qualidade de cima sem gastar concentração.\nAparece como linha \"reagentes sup.\" na lista. Se der mais lucro que a concentração, a receita sai do plano de concentração.\nVale no próximo scan (abra a profissão)."]); y = y - 26
@@ -288,7 +290,13 @@ local function Create(parent)
 	Check(XR, y, L["Fila inclui o plano de concentração"], "queueIncludePlan", false,
 		L["Os crafts do plano do personagem logado entram sozinhos na Fila e na lista de compras."]); y = y - 24
 	Check(XR, y, L["Segurar concentração para a receita mais lucrativa"], "planHold", false,
-		L["Não gasta concentração numa receita de menos ouro por ponto: mostra \"SEGURE até X\" e quanto rende a mais esperar. Desligado = gasta em qualquer receita lucrativa que caiba agora."]); y = y - 32
+		L["Não gasta concentração numa receita de menos ouro por ponto: mostra \"SEGURE até X\" e quanto rende a mais esperar. Desligado = gasta em qualquer receita lucrativa que caiba agora."]); y = y - 24
+	Check(XR, y, L["Limitar os crafts ao que o mercado absorve"], "capByMarket", false,
+		L["Sem isto o plano fabrica até a concentração acabar, mesmo que o item não tenha para quem ser vendido. O teto é: vendas/dia do item x dias de horizonte x a sua fatia do giro."]); y = y - 24
+	Edit(XR, y, L["Horizonte de venda (dias):"], 50, "absorbDays", "number", false,
+		L["Em quantos dias você espera escoar o que fabricar. Padrão 7."]); y = y - 26
+	Edit(XR, y, L["Sua fatia do giro da região (%):"], 50, "absorbShare", "percent", false,
+		L["Quanto das vendas diárias da região você consegue tomar. Padrão 5%."]); y = y - 32
 
 	y = Header(L["Tendência e vendas reais"], XR, y, L["Receitas, Plano e a aba Vendas do Livro-caixa"])
 	Edit(XR, y, L["Preço caindo abaixo de (% do histórico):"], 50, "trendDrop", "percent", true,

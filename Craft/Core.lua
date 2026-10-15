@@ -43,20 +43,22 @@ local function G(c) return c and ns.Pricing.FormatMoney(c) or "—" end
 local function Audit(query)
 	local q = (query or ""):lower()
 	if q == "" then ns.Print(L["uso: /lucro audit <nome da receita ou recipeID>"]) return end
-	local found
+	local found, foundEntry
 	for _, entry in pairs((LucroCraftDB.chars or {})[ns.CharKey()] or {}) do
 		local list = {}
 		for _, r in ipairs(entry.rows or {}) do table.insert(list, r) end
 		for _, r in ipairs(entry.unknown or {}) do table.insert(list, r) end
 		for _, r in ipairs(list) do
 			if tostring(r.recipeID) == q or (r.name and r.name:lower():find(q, 1, true)) then
-				found = r
+				found, foundEntry = r, entry
 				break
 			end
 		end
 		if found then break end
 	end
 	if not found then ns.Print(L["receita não encontrada: "] .. query) return end
+	-- a aba de Auditoria desenha a partir da LINHA, não do texto: guarda quem foi auditado
+	ns.auditRow, ns.auditEntry = found, foundEntry
 	local r, a = found, found.audit or {}
 	ns.Print(string.format(L["|cffffd100Auditoria: %s|r (recipe %d, item %d)"], r.name or "?", r.recipeID, r.itemID or 0))
 	for _, part in ipairs(r.parts or {}) do
@@ -95,10 +97,11 @@ ns.Audit = Audit
 function ns.AuditTo(query, alsoPrint)
 	local buf = {}
 	sink = buf
+	ns.auditRow, ns.auditEntry = nil, nil
 	local ok, err = pcall(Audit, query)
 	sink = nil
 	if not ok then buf[#buf + 1] = "|cffff5555" .. tostring(err) .. "|r" end
-	ns.auditOut = { query = query, t = time(), lines = buf }
+	ns.auditOut = { query = query, t = time(), lines = buf, row = ns.auditRow, e = ns.auditEntry }
 	if alsoPrint then for _, line in ipairs(buf) do print(line) end end
 	return ns.auditOut
 end

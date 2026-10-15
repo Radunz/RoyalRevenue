@@ -531,6 +531,11 @@ function ns.Recommendable(r, forConc)
 	if rank > min then return false, L["classe "] .. (abc or L["sem lucro"]) end
 	-- participação mínima nas vendas da profissão (ex.: 1% = itens que realmente giram)
 	local minShare = tonumber(Cfg("recoMinShare")) or 0.01
+	-- A participação nas vendas é um substituto grosseiro de "dá para vender o que eu fabricar".
+	-- Com o teto de absorção ligado (Plan.Absorcao) essa pergunta é respondida direto, em unidades,
+	-- e aí o filtro só atrapalha: era ele que cortava a receita de MAIOR ouro/ponto por ela ter
+	-- 0,42% do giro, enquanto o teto simplesmente limitaria quantos crafts fazer.
+	if forConc and Cfg("capByMarket") ~= false then return true end
 	-- com concentração quem é vendido é o item de cima: a participação tem de ser a dele.
 	-- concSpdShare é campo novo e NÃO está nos dados já salvos (spdShare está, porque é antigo):
 	-- sem ele, cair para o do item base — ausência de dado não é prova de que vende pouco, e
@@ -646,23 +651,45 @@ local function EffectiveConc(conc, st, refund)
 end
 Scanner.EffectiveConc = EffectiveConc
 
+-- ===== preço projetado (tendência) =====
+-- O item não é vendido hoje: é vendido ao longo de dias. Com o preço caindo, usar o preço de hoje
+-- superestima o lucro de forma sistemática — e a tendência já era calculada (`r.trend`,
+-- `r.concTrend`), só não entrava na conta. O Refreshing Serum do print estava com -23%.
+--   - metade da tendência, porque você vende aos poucos e não tudo no fim do período;
+--   - só para BAIXO: deixar a alta inflar o plano seria recomendar craft por aposta de preço;
+--   - piso de -50%, por mais feia que esteja a tendência.
+-- Liga/desliga em Ajustes (`trendDiscount`).
+local TREND_K, TREND_FLOOR = 0.5, -0.5
+local function Projected(sale, trend)
+	if not sale then return nil end
+	if not Cfg("trendDiscount") then return sale end
+	local t = tonumber(trend)
+	if not t or t >= 0 then return sale end
+	return sale * (1 + math.max(TREND_FLOOR, t * TREND_K))
+end
+Scanner.Projected = Projected
+
 -- Calcula lucro, margem e concentração de uma linha (depois do custo final definido)
 local function ComputeProfit(r)
 	local ahCut = Cfg("ahCut")
+	-- preço usado na conta (o r.sale continua sendo o preço de hoje, que é o que a tela mostra)
+	r.saleProj = Projected(r.sale, r.trend)
+	r.concSaleProj = Projected(r.concSale, r.concTrend)
+	r.mixSaleProj = Projected(r.mixSale, r.mixTrend)
 	local st = r.stats
 	r.expQty = ExpectedItems(r.qty, st, r.recipeID, Scanner._finalChar, Scanner._finalSig)
 	r.expCost = ExpectedCost(r.cost, st)
 	r.unitCost = r.expQty > 0 and r.expCost / r.expQty or nil
 	r.profit, r.margin, r.profitBase = nil, nil, nil
 	if r.sale then
-		r.profitBase = r.sale * r.qty * (1 - ahCut) - r.cost
-		r.profit = r.sale * r.expQty * (1 - ahCut) - r.expCost
+		r.profitBase = r.saleProj * r.qty * (1 - ahCut) - r.cost
+		r.profit = r.saleProj * r.expQty * (1 - ahCut) - r.expCost
 		if r.expCost > 0 then r.margin = r.profit / r.expCost end
 	end
 	r.concProfit, r.perConc, r.concEff, r.concBeaten = nil, nil, nil, nil
 	if r.concCost and r.concSale then
 		r.concEff = EffectiveConc(r.concCost, st, r.ingRefund)
-		r.concProfit = r.concSale * r.expQty * (1 - ahCut) - r.expCost
+		r.concProfit = r.concSaleProj * r.expQty * (1 - ahCut) - r.expCost
 		r.perConc = r.concProfit / r.concEff
 	end
 	-- qualidade de cima com reagentes melhores (sem concentração)
@@ -670,7 +697,7 @@ local function ComputeProfit(r)
 	if r.mix and r.mixSale then
 		r.mixCost = r.cost + (r.mix.extra or 0)
 		r.mixExpCost = ExpectedCost(r.mixCost, st)
-		r.mixProfit = r.mixSale * r.expQty * (1 - ahCut) - r.mixExpCost
+		r.mixProfit = r.mixSaleProj * r.expQty * (1 - ahCut) - r.mixExpCost
 		-- se os reagentes dão o mesmo resultado com mais lucro, não vale gastar concentração aqui
 		if r.perConc and r.mixProfit >= (r.concProfit or -math.huge) then
 			r.concBeaten = true
@@ -680,9 +707,13 @@ local function ComputeProfit(r)
 	if r.audit then
 		r.audit.formula = string.format(
 			L["custo compra=%d usado=%d esperado=%d | itens %.2f esperados %.2f | venda=%s | lucro base=%s esperado=%s | stats mc %.1f%% res %.1f%% ing %.1f%% | conc Q%s->Q%s %s (efetiva %s) venda %s lucro %s"],
-			r.buyCost or 0, r.cost or 0, r.expCost or 0, r.qty, r.expQty, tostring(r.sale), tostring(r.profitBase), tostring(r.profit),
+			r.buyCost or 0, r.cost or 0, r.expCost or 0, r.qty, r.expQty,
+			tostring(r.sale) .. (r.saleProj ~= r.sale and (" proj=" .. string.format("%.0f", r.saleProj)) or ""),
+			tostring(r.profitBase), tostring(r.profit),
 			(st and st.mc or 0) * 100, (st and st.res or 0) * 100, (st and st.ing or 0) * 100,
-			tostring(r.quality), tostring(r.concQuality), tostring(r.concCost), tostring(r.concEff), tostring(r.concSale), tostring(r.concProfit))
+			tostring(r.quality), tostring(r.concQuality), tostring(r.concCost), tostring(r.concEff),
+			tostring(r.concSale) .. (r.concSaleProj ~= r.concSale and (" proj=" .. string.format("%.0f", r.concSaleProj)) or ""),
+			tostring(r.concProfit))
 	end
 end
 Scanner.ComputeProfit = ComputeProfit

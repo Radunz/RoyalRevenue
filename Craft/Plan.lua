@@ -36,6 +36,25 @@ local function Hours(h)
 	return string.format(L["%.1f dias"], h / 24)
 end
 
+-- ===== quanto o mercado absorve =====
+-- O plano respondia "qual receita rende mais por ponto" e mandava fabricar até a concentração
+-- acabar, sem perguntar se dá para VENDER tudo aquilo. Foi o que produziu o caso do print: 3 crafts
+-- de Refreshing Serum = ~20 unidades de um item cuja qualidade 2 gira 276/dia na região inteira.
+-- O número era real no papel e irrealizável no mercado.
+--
+-- Teto = vendas/dia do item que a receita realmente vende x dias de horizonte x a fatia que você
+-- consegue tomar desse giro. Sem dado de giro não há teto (ausência de dado não é prova de nada).
+local function Absorcao(r)
+	if ns.Cfg("capByMarket") == false then return nil end
+	local spd = r.concSpd or r.spd
+	if not spd or spd <= 0 then return nil end
+	local dias = tonumber(ns.Cfg("absorbDays")) or 7
+	local fatia = tonumber(ns.Cfg("absorbShare")) or 0.05
+	if dias <= 0 or fatia <= 0 then return nil end
+	return spd * dias * fatia
+end
+Plan.Absorcao = Absorcao
+
 -- Distribui uma quantidade de concentração nas receitas de maior ouro/ponto
 -- Para COMEÇAR um craft o jogo exige o custo cheio (concCost); a devolução da engenhosidade vem depois.
 -- Por isso: só faz o craft se sobrar o custo cheio; o gasto médio por craft é o custo efetivo (concEff).
@@ -46,10 +65,18 @@ local function Allocate(cands, conc)
 		local full = r.concCost or per
 		local n = 0
 		if left >= full then n = math.floor((left - full) / per) + 1 end
+		-- teto de mercado: cada craft sai com expQty unidades, então o limite é em CRAFTS
+		local limite, unidades = nil, r.expQty or r.qty or 1
+		local abs = Absorcao(r)
+		if abs and unidades > 0 then
+			limite = math.floor(abs / unidades)
+			if n > limite then n = limite end
+		end
 		if n > 0 then
 			left = left - n * per
 			gold = gold + n * r.perConc * per
-			table.insert(used, { row = r, crafts = n, gold = n * r.perConc * per, conc = n * per })
+			table.insert(used, { row = r, crafts = n, gold = n * r.perConc * per, conc = n * per,
+				capped = (limite and limite == n) or nil, absorve = abs })
 		end
 	end
 	return gold, used, left
@@ -165,7 +192,8 @@ local function Render()
 				local warn = flag == "down" and string.format(L[" |cffff5555(preço caindo %s)|r"], P.TrendText(r.concTrend))
 					or flag == "spike" and string.format(L[" |cffffd100(preço em pico %s)|r"], P.TrendText(r.concTrend)) or ""
 				add(string.format(L["   %dx %s %s · %s/ponto · %d conc > %s"],
-					u.crafts, r.name, ns.QIcon(r.concQuality or 2, r.maxQuality), G(r.perConc), math.floor(u.conc + 0.5), G(u.gold)) .. warn)
+					u.crafts, r.name, ns.QIcon(r.concQuality or 2, r.maxQuality), G(r.perConc), math.floor(u.conc + 0.5), G(u.gold))
+					.. warn .. (u.capped and L[" (limitado pelo mercado)"] or ""))
 			end
 			if it.left >= 1 then
 				add(string.format(L["   |cff9d9d9dsobram ~%d de concentração (não fecham mais um craft lucrativo)|r"], math.floor(it.left)))
@@ -329,6 +357,17 @@ function Plan.Render(cv)
 								tt:AddDoubleLine(L["Lucro total"], P.FormatMoney(u.gold), 1, 0.82, 0, 0.3, 1, 0.3)
 								if r.concTrend then
 									tt:AddDoubleLine(L["Tendência do preço"], P.TrendText(r.concTrend), 1, 0.82, 0, 1, 1, 1)
+									if r.concSaleProj and r.concSale and r.concSaleProj < r.concSale then
+										tt:AddDoubleLine(L["Preço usado na conta"], P.FormatMoney(r.concSaleProj),
+											0.6, 0.6, 0.6, 1, 0.8, 0.3)
+									end
+								end
+								-- por que não fabricar mais: foi o mercado, não a concentração
+								if u.capped then
+									tt:AddLine(string.format(
+										L["Limitado pelo mercado: ~%s unidades em %s dias (giro x a sua fatia)."],
+										root.Num(u.absorve or 0, 0), tostring(ns.Cfg("absorbDays") or 7)),
+										1, 0.8, 0.3, true)
 								end
 							end,
 						})

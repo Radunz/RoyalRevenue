@@ -196,33 +196,185 @@ end
 -- ===== Aba Auditoria =====
 -- O cálculo completo de uma receita, dentro da janela. Antes isso só saía em texto no chat,
 -- numa aba de log que podia nem existir (ou estar encaixada e nunca ser olhada).
+-- ===== aba Auditoria =====
+-- Era uma parede de texto: servia para copiar, não para entender. Agora desenha a partir da LINHA
+-- auditada (ns.auditOut.row) as quatro coisas que de fato resolvem um número errado — a conta
+-- aberta, os reagentes com preço unitário, as fontes de preço com a escolhida marcada, e por que a
+-- receita é ou não recomendada. O texto cru continua a um clique, para colar em algum lugar.
 UI.AuditView = {}
+
+local function Faixa(cv, y, W, titulo, direita)
+	cv:Box(0, y, W, 18, 0.08, 0.13, 0.24, 0.95)
+	cv:Box(0, y + 17, W, 1, 0.83, 0.69, 0.22, 0.6)
+	cv:Text(8, y + 2, "|cffd4af37" .. titulo .. "|r", GameFontNormalSmall)
+	if direita then cv:Text(8, y + 2, "|cff9d9d9d" .. direita .. "|r", GameFontDisableSmall, W - 16, "RIGHT") end
+	return y + 22
+end
+
+-- linha "rótulo .......... valor", com barra proporcional opcional
+local function Linha(cv, y, W, rotulo, valor, frac, cor, obs)
+	cv:Text(10, y, rotulo, GameFontHighlightSmall, 150)
+	if frac then
+		local bw = math.max(0, math.floor((W - 420) * math.min(1, math.abs(frac))))
+		cv:Box(166, y + 2, bw, 10, cor[1], cor[2], cor[3], 0.75)
+	end
+	cv:Text(W - 230, y, valor, GameFontHighlightSmall, 110, "RIGHT")
+	if obs then cv:Text(W - 112, y, "|cff9d9d9d" .. obs .. "|r", GameFontDisableSmall, 104) end
+	return y + 16
+end
+
 function UI.AuditView.Render(cv)
 	local W = cv:Width()
+	local G, V = P.FormatGold, ns.Visual
 	cv:Begin()
 	local out = ns.auditOut
-	if not out or #(out.lines or {}) == 0 then
+	if not out or (#(out.lines or {}) == 0 and not out.row) then
 		cv:Text(8, 8, L["Alt+clique numa receita (ou /lucro audit <nome>) para ver aqui o cálculo completo dela."],
 			GameFontHighlight, W - 16)
 		cv:End(40)
 		return
 	end
 	local age = out.t and (time() - out.t) or 0
+	local cru = ns.auditRaw and true or false
 	cv:Text(8, 4, string.format(L["|cffd4af37Auditoria|r  |cff9d9d9d%s · há %ds|r"], tostring(out.query or "?"), age),
-		GameFontNormal, W - 120)
+		GameFontNormal, W - 220)
+	cv:Button(W - 200, 2, 96, 18, cru and L["Ver desenho"] or L["Ver texto cru"], function()
+		ns.auditRaw = not ns.auditRaw
+		UI.RefreshTab(TAB.AUDIT)
+	end, function(tt) tt:SetText(L["Alterna entre o desenho e as linhas de texto"]) end)
 	cv:Button(W - 96, 2, 88, 18, L["Copiar p/ log"], function()
 		for _, line in ipairs(ns.auditOut and ns.auditOut.lines or {}) do ns.root.Out(line) end
 	end, function(tt)
 		tt:SetText(L["Copiar p/ log"])
 		tt:AddLine(L["Manda estas linhas para o chat/aba de log, para dar Ctrl+C."], 1, 1, 1, true)
 	end)
-	local y = 26
-	for i, line in ipairs(out.lines) do
-		root.Zebra(cv, i, 0, y - 1, W, 15)
-		cv:Text(8, y, line, GameFontHighlightSmall, W - 16)
-		y = y + 15
+
+	local r = out.row
+	if cru or not r then
+		local y = 26
+		for i, line in ipairs(out.lines) do
+			root.Zebra(cv, i, 0, y - 1, W, 15)
+			cv:Text(8, y, line, GameFontHighlightSmall, W - 16)
+			y = y + 15
+		end
+		cv:End(y + 8)
+		return
 	end
-	cv:End(y + 8)
+
+	local y = 26
+	-- ----- cabeçalho: item, qualidade e o número que importa -----
+	cv:Box(0, y, W, 56, 0.17, 0.36, 0.66, 0.18)
+	cv:Box(0, y, 3, 56, 0.70, 0.13, 0.20, 0.9)
+	cv:Icon(8, y + 10, 36, V.ItemIcon(r.concItemID or r.itemID, r.icon), {
+		rarity = (r.itemID and C_Item.GetItemQualityByID) and C_Item.GetItemQualityByID(r.itemID) or nil,
+		quality = r.quality and ns.QIcon(r.quality, r.maxQuality, 12) or nil,
+		link = r.saleLink or (r.itemID and select(2, C_Item.GetItemInfo(r.itemID))) })
+	cv:Text(52, y + 8, r.name or "?", GameFontNormalLarge, W - 320)
+	cv:Text(52, y + 30, string.format("|cff9d9d9drecipe %s · item %s · %s|r",
+		tostring(r.recipeID), tostring(r.itemID), tostring(out.e and out.e.name or "?")), GameFontDisableSmall, W - 320)
+	local destaque, sub
+	if r.perConc then
+		destaque, sub = P.FormatMoney(r.perConc), L["por ponto de concentração"]
+	else
+		destaque, sub = G(r.profit or 0, true), L["lucro por fabricação"]
+	end
+	cv:Text(W - 250, y + 8, destaque, GameFontNormalLarge, 242, "RIGHT")
+	cv:Text(W - 250, y + 32, "|cff9d9d9d" .. sub .. "|r", GameFontDisableSmall, 242, "RIGHT")
+	y = y + 62
+
+	-- ----- a conta -----
+	local usaConc = r.concCost and r.concSale
+	local venda = usaConc and (r.concSaleProj or r.concSale) or (r.saleProj or r.sale)
+	local vendaHoje = usaConc and r.concSale or r.sale
+	local un = r.expQty or r.qty or 1
+	local bruto = (venda or 0) * un
+	local cut = bruto * (ns.Cfg("ahCut") or 0)
+	local custo = r.expCost or r.cost or 0
+	local maior = math.max(bruto, custo, 1)
+	y = Faixa(cv, y, W, L["A conta, por fabricação"],
+		usaConc and L["com concentração"] or L["sem concentração"])
+	y = Linha(cv, y, W, L["Venda"], G(bruto), bruto / maior, { 0.3, 0.9, 0.4 },
+		string.format(L["%s x %.2f un"], G(venda or 0), un))
+	if vendaHoje and venda and math.abs(vendaHoje - venda) > 1 then
+		y = Linha(cv, y, W, L["   preço de hoje"], G(vendaHoje), nil, nil, L["tendência descontada"])
+	end
+	y = Linha(cv, y, W, L["Taxa da casa de leilões"], "-" .. G(cut), cut / maior, { 0.9, 0.6, 0.3 },
+		string.format("%.0f%%", (ns.Cfg("ahCut") or 0) * 100))
+	y = Linha(cv, y, W, L["Materiais"], "-" .. G(custo), custo / maior, { 0.9, 0.3, 0.3 },
+		(r.cost and r.expCost and math.abs(r.cost - r.expCost) > 1) and L["com resourcefulness"] or nil)
+	cv:Box(10, y + 2, W - 240, 1, 1, 1, 1, 0.25)
+	y = y + 6
+	local lucro = usaConc and r.concProfit or r.profit
+	y = Linha(cv, y, W, "|cffffffff" .. L["Lucro"] .. "|r",
+		"|cff55ff55" .. G(lucro or 0, true) .. "|r", nil, nil, nil)
+	if usaConc then
+		y = Linha(cv, y, W, L["Concentração"],
+			ns.ConcStr(r.concCost or 0, out.e and out.e.professionID), nil, nil,
+			r.concEff and string.format(L["efetiva %.1f"], r.concEff) or nil)
+	end
+	y = y + 4
+
+	-- ----- reagentes -----
+	y = Faixa(cv, y, W, L["Reagentes"], G(r.cost or 0))
+	for i, p in ipairs(r.parts or {}) do
+		local id = p.buyItem or p.itemID
+		root.Zebra(cv, i, 0, y - 1, W, 20)
+		cv:Icon(10, y, 18, V.ItemIcon(id), { link = id and select(2, C_Item.GetItemInfo(id)) })
+		cv:Text(32, y + 2, string.format("%dx %s", p.qty or 1, V.ItemName(id) or tostring(id)),
+			GameFontHighlightSmall, W - 300)
+		cv:Text(W - 260, y + 2, p.unit and G(p.unit) or L["|cff9d9d9dsem preço|r"], GameFontDisableSmall, 90, "RIGHT")
+		cv:Text(W - 160, y + 2, (p.unit and p.qty) and G(p.unit * p.qty) or "—", GameFontHighlightSmall, 90, "RIGHT")
+		y = y + 20
+	end
+	y = y + 4
+
+	-- ----- fontes de preço do item vendido -----
+	local alvo = usaConc and r.concItemID or r.itemID
+	local fontes = r.audit and r.audit.prices and r.audit.prices[alvo]
+	if fontes then
+		y = Faixa(cv, y, W, L["Preço do item vendido"], V.ItemName(alvo) or tostring(alvo))
+		local chaves, usado = {}, tonumber(fontes.usedSale)
+		for k in pairs(fontes) do
+			if k ~= "usedSale" and k ~= "usedCost" then table.insert(chaves, k) end
+		end
+		table.sort(chaves, function(a, b) return (tonumber(fontes[a]) or 0) > (tonumber(fontes[b]) or 0) end)
+		for i, k in ipairs(chaves) do
+			local v = tonumber(fontes[k])
+			local escolhida = usado and v and math.abs(v - usado) < 1
+			root.Zebra(cv, i, 0, y - 1, W, 16)
+			cv:Text(10, y, (escolhida and "|cff55ff55" or "|cffd9dde3") .. k .. "|r", GameFontHighlightSmall, 220)
+			cv:Text(W - 260, y, G(v or 0), GameFontHighlightSmall, 90, "RIGHT")
+			if escolhida then cv:Text(W - 160, y, L["|cff55ff55usado|r"], GameFontDisableSmall, 90) end
+			y = y + 16
+		end
+		y = y + 4
+	end
+
+	-- ----- operação e decisão -----
+	y = Faixa(cv, y, W, L["Operação e decisão"], r.audit and r.audit.opMode or nil)
+	local st = r.stats
+	y = Linha(cv, y, W, L["Perícia / dificuldade"],
+		string.format("%s / %s", tostring(r.skill or "?"), tostring(r.difficulty or "?")), nil, nil,
+		r.quality and (ns.QIcon(r.quality, r.maxQuality) .. L[" alcançada"]) or nil)
+	if st then
+		y = Linha(cv, y, W, L["Multicraft / resource. / ingenuity"],
+			string.format("%.1f%% / %.1f%% / %.1f%%", (st.mc or 0) * 100, (st.res or 0) * 100, (st.ing or 0) * 100))
+	end
+	local vendas = usaConc and r.concSpd or r.spd
+	if vendas then
+		local abs = ns.Plan and ns.Plan.Absorcao and ns.Plan.Absorcao(r)
+		y = Linha(cv, y, W, L["Vendas por dia (região)"], root.Num(vendas, 1), nil, nil,
+			abs and string.format(L["teto ~%s un"], root.Num(abs, 0)) or L["sem teto"])
+	end
+	local okReco, porque = ns.Recommendable(r, usaConc and true or false)
+	y = Linha(cv, y, W, L["Recomendada"],
+		okReco and L["|cff55ff55sim|r"] or L["|cffff5555não|r"], nil, nil,
+		(not okReco) and tostring(porque) or ((usaConc and r.concAbc) or r.abc or nil))
+	if r.audit and r.audit.opError then
+		y = Linha(cv, y, W, L["|cffff5555Erro na operação|r"], "", nil, nil, tostring(r.audit.opError))
+	end
+
+	cv:End(y + 10)
 end
 
 local function SortValue(r, key)

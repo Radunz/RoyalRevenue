@@ -1053,3 +1053,64 @@ na primeira execução ele achou dois.
   saíram da rodada normal. A suíte passou a ser **78 testes com zero falhas** — antes era
   "110 arquivos, 32 quebrados, ignore esses". `./run_all.sh ../ out --legacy` traz de volta.
 - `CLAUDE.md` atualizado com a estrutura nova.
+
+## v1.37.0 — as quatro melhorias pedidas + o acessório que saía na qualidade errada
+Ideias 1, 2, 3 e 5 da lista (a 4 saiu na v1.36.0), mais o bug do print do Saalla.
+
+### Acessório mostrado na qualidade mais baixa (print do Rafael)
+"o acessório 1 do Saalla está correto, porém o acessório 2 está mostrando o item na qualidade 2; se
+for mostrar um upgrade, mostra sempre o item com a melhor qualidade possível."
+- Causa: a tela só conhecia `c.outLink`, o link do scan — e **todos os 171 outLink salvos estão em
+  Q5**, por isso o acessório 1 saía certo. Candidato **sem** outLink caía em `tt:SetItemByID`, que
+  mostra a peça na qualidade/nível mais baixos. O `CraftedStats` já montava um link na qualidade
+  máxima a partir da peça equipada para ler os atributos, mas esse link era **descartado** (3º
+  retorno ignorado).
+- `EvalAgainst` guarda `res.link`; a tela usa `CandLink`/`CandTier` e a estrela passa a ser a
+  qualidade REAL do link mostrado, não um 5 fixo nem o item base.
+- Teste: t111.lua.
+
+### 1. O plano limita os crafts ao que o mercado absorve
+- `Plan.Absorcao(r)`: teto em unidades = vendas/dia do item que a receita realmente vende x dias de
+  horizonte x a sua fatia do giro. `Allocate` converte em crafts (`expQty` por craft) e marca a
+  linha com `capped`.
+- **E o filtro de participação sai de cena quando o teto está ligado.** `recoMinShare` era um
+  substituto grosseiro de "dá para vender o que eu fabricar"; com a pergunta respondida direto, em
+  unidades, ele só atrapalhava — era ele que cortava a receita de MAIOR ouro/ponto por ela ter 0,42%
+  do giro, quando o certo é deixá-la entrar e limitar quantos crafts fazer.
+- Ajustes: `capByMarket` (liga/desliga), `absorbDays` (7) e `absorbShare` (5%).
+- Medido nos dados reais: **+11,0%** no plano, e uma receita de fato capada (Quick Lapis, 2 crafts,
+  absorve 3 unidades). Com fatia de 1% o teto aperta mais (-0,8%).
+- Testes: t114.lua, e t109.lua passou a desligar o teto porque é sobre o filtro.
+
+### 2. Desconto da tendência de preço (com liga/desliga)
+- O lucro era projetado pelo preço de HOJE, mas o item é vendido ao longo de dias. A tendência já
+  era calculada (`r.trend`, `r.concTrend` — o Refreshing Serum do print estava em -23%) e não entrava
+  em lugar nenhum.
+- `Scanner.Projected`: metade da tendência (você vende aos poucos), **só na queda** (deixar a alta
+  inflar o plano seria recomendar craft por aposta de preço), piso de -50%.
+- `r.sale` continua sendo o preço de hoje, que é o que a tela mostra; a conta usa `r.saleProj`. A
+  auditoria mostra os dois.
+- Ajuste `trendDiscount` (ligado por padrão). Medido nos dados reais: **-15,6%** no plano.
+- Teste: t113.lua.
+
+### 3. Descarte de preço fora de escala
+- O Auctionator traz valor absurdo em 8 de 5.555 itens: o 241307 a 17.000,84g contra 5,02g do TSM
+  (3.386x). Com o TSM na frente nunca apareceu, mas com o Auctionator como fonte vira lucro
+  fantasioso sem nenhum sinal.
+- Quando há TSM para comparar (consulta já cacheada por 60 s), valor acima de 20x ou abaixo de 1/20
+  da referência é descartado, com um aviso no log — uma vez por item.
+- Teste: t112.lua.
+
+### 5. Aba Auditoria desenhada
+- Era uma parede de texto: servia para copiar, não para entender. Os três bugs de número desta série
+  foram diagnosticados lendo o SavedVariables com script, caminho que o usuário não tem.
+- `ns.auditOut.row` guarda a linha auditada e a aba desenha a partir dela: **a conta aberta** (venda
+  x unidades, taxa da AH, materiais, com barras proporcionais e o preço de hoje vs o projetado),
+  **os reagentes** com preço unitário, **as fontes de preço** do item vendido com a escolhida
+  marcada, e **operação e decisão** (perícia, stats, vendas/dia, teto de absorção, recomendada ou o
+  motivo do corte). Botão alterna para o texto cru, que continua existindo para colar.
+- Teste: t115.lua (4 seções presentes, nada fora do canvas, alternância e estado vazio).
+
+### Nota de migração
+`ComputeProfit` e `ApplyABC` só rodam no scan, então **os números mudam ao reabrir cada profissão**,
+não no `/reload`. É o mesmo comportamento da v1.35.3.
