@@ -965,3 +965,56 @@ válida para ordens de NPC; de player sempre devemos tentar atingir a qualidade 
 - Muda de propósito, e serve de prova em dado que já existia: `t83` (pedido `orderType=3` pedindo q3
   com o personagem fazendo q3: `conc 351` → `conc nil`) e `t52` (13 → 12 ícones, a concentração que
   não precisa mais ser desenhada).
+
+## v1.35.3 — o filtro de vendas da curva de concentração media o item errado (print do Rafael)
+Print: Alquimia do Radunz, 382 pontos, 877,28g em 3x Refreshing Serum. "não está fazendo sentido
+para mim dar quase 900g com somente 382 de concentração."
+
+- **Os 877,28g estavam aritmeticamente certos.** Conferido insumo por insumo contra o
+  SavedVariables: reagentes (5x 240991 + 8x 236761 + 3x 236770 = 31,85g) com preço concordante em
+  **7 fontes**; `opMode = chosen reagents` sem erro, então os 129 pontos vieram da própria API do
+  jogo com esses reagentes; venda do Q2 (50,00g) batendo com o `DBRegionSaleAvg` do TSM (51,14g) que
+  aparece no tooltip do print; e a fórmula fecha: 50g x 6,80 itens x 0,95 − 30,41g = 292,43g por
+  craft, x3 = 877,29g.
+  - A divergência do TSM no print ("-221g de lucro") também se explica: o TSM não modela
+    concentração, então precifica chegar na Q2 pelos **reagentes caros**. Pelo caminho caro o custo
+    é 1.529,54g por craft (305,91g por item) contra 50g de venda = -255,91g por item. Mesmo sinal e
+    mesma ordem de grandeza do que o TSM mostra. São duas estratégias diferentes, não um erro.
+- **O defeito estava na ESCOLHA da receita, não no número.** `ns.Recommendable(r, forConc)` filtra
+  por participação nas vendas da profissão (`recoMinShare`, 1% por padrão), mas usava **sempre**
+  `r.spdShare`, que é a participação do item BASE. Receita com concentração vende o item de CIMA.
+  Na Alquimia do Radunz isso reprovava as 4 melhores por ouro/ponto e aprovava justo a pior:
+
+  | receita | g/ponto | spdShare (Q1) | concSpd (Q2) | antes |
+  |---|---|---|---|---|
+  | Liquid Luster | 4,25g | 0,725% | 1.308/dia | reprovada |
+  | Potion of Recklessness | 2,73g | 0,397% | **22.726/dia** | reprovada |
+  | Refreshing Serum | 2,55g | 2,061% | **276/dia** | **aprovada** |
+
+  Ou seja: o plano mandava fabricar 20 poções cujo Q2 gira 276/dia, e barrava uma cujo Q2 gira
+  22.726/dia. O número era real no papel e irrealizável no mercado — que é o que incomodou.
+- O que mudou (`Craft/Scanner.lua`):
+  - `ApplyABC` passa a calcular `r.concSpdShare = r.concSpd / concSpdTotal`, com denominador próprio
+    (só o que é vendável na qualidade de cima). São dois itens diferentes, então são duas
+    participações diferentes; cada uma soma 100% no seu universo.
+  - `ns.Recommendable` usa `concSpdShare` quando `forConc`, e `spdShare` caso contrário.
+  - **Compatibilidade:** `spdShare` fica gravado no SavedVariables (campo antigo), `concSpdShare`
+    não. Sem um fallback, todo dado já salvo reprovaria tudo e **o plano inteiro iria a zero** até
+    cada profissão ser reaberta — foi o que a suíte acusou (147.993.961 → 0 no t1, e t70/t84 passando
+    a dar erro). Com o fallback para `spdShare` quando `concSpdShare` ainda não existe, o plano com
+    dados salvos fica **idêntico ao de antes**, e muda só depois do rescan.
+- Efeito nos dados reais do Rafael (Alquimia do Radunz, 382 pontos):
+  - como está salvo: 877,28g — 3x Refreshing Serum (sem mudança até reabrir a profissão);
+  - depois de reabrir a Alquimia: 761,61g — 2x Potion of Recklessness.
+- Teste: t109.lua (duas receitas espelhadas + enchimento: a de base forte/cima fraco é aprovada na
+  curva base e **reprovada** na de concentração, e a de base fraca/cima forte o contrário; as duas
+  participações somam 100% cada). Falha na v1.35.2, onde as duas curvas davam a mesma resposta e
+  `concSpdShare` nem existia.
+
+### Anotações (não mexi)
+- O Auctionator tem preço absurdo em 8 itens de 5.555 (0,14%): item 241307 a 17.000,84g contra 5,02g
+  do TSM (3.386x), 268475 a 26.535g (41x). Não afetou este cálculo porque a fonte configurada é o
+  TSM, mas com `priceMode` no Auctionator produziria lucro fantasioso. Vale um guard de sanidade.
+- `Liquid Luster`, a melhor por ouro/ponto (4,25g), continua cortada: o Q2 dela gira 1.308/dia, que
+  é 0,42% da profissão. Baixar `recoMinShare` de 1% para 0,3% a liberaria e o plano iria a 1.111,66g.
+  É decisão de configuração do Rafael; não mudei o padrão.

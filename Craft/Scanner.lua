@@ -424,11 +424,13 @@ end
 --   Sem concentração -> margem (lucro ÷ custo), o ouro que volta por ouro parado em material
 local function ApplyABC(rows)
 	local conc, noconc, total, nTotal, spdTotal = {}, {}, 0, 0, 0
+	local concSpdTotal = 0   -- vendas da profissão no item que a receita COM concentração vende (o de cima)
 	local minSpd = tonumber(Cfg("minSoldPerDay")) or 1
 	local exclGathered = Cfg("excludeGathered") and true or false   -- fora do loop: é a mesma para todas
 	for _, r in ipairs(rows) do
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
 		r.concAbc, r.concAbcShare, r.mixAbc, r.mixAbcShare = nil, nil, nil, nil
+		r.concSpdShare = nil
 		r.gathered = (exclGathered and ns.IsGathered(r)) or nil
 		r.notAuctionable = (not ns.IsAuctionable(r.itemID)) or nil
 		-- sem concItemID, a concentração sai no MESMO item: o vínculo é o do item base
@@ -440,6 +442,7 @@ local function ApplyABC(rows)
 		end
 		if not r.gathered then
 			if (r.spd or 0) > 0 and not r.notAuctionable then spdTotal = spdTotal + r.spd end
+			if (r.concSpd or 0) > 0 and not r.concNotAuctionable then concSpdTotal = concSpdTotal + r.concSpd end
 			-- resultado base (não gasta concentração): entra na curva da MARGEM
 			if not r.notAuctionable and (r.profit or 0) > 0 and (r.spd or 0) >= minSpd then
 				r.abcFree = true
@@ -470,10 +473,20 @@ local function ApplyABC(rows)
 			end
 		end
 	end
-	-- % das vendas da profissão: continua sobre as VENDAS (é o que o recoMinShare filtra)
+	-- % das vendas da profissão: continua sobre as VENDAS (é o que o recoMinShare filtra).
+	-- Duas participações, porque são dois itens diferentes: a receita sem concentração vende o item
+	-- base (r.spd) e a COM concentração vende o de cima (r.concSpd). Medir a de concentração pelo
+	-- item base reprovava receita cuja qualidade alta gira muito, e aprovava o contrário.
 	if spdTotal > 0 then
 		for _, r in ipairs(rows) do
 			if not r.gathered and not r.notAuctionable and (r.spd or 0) > 0 then r.spdShare = r.spd / spdTotal end
+		end
+	end
+	if concSpdTotal > 0 then
+		for _, r in ipairs(rows) do
+			if not r.gathered and not r.concNotAuctionable and (r.concSpd or 0) > 0 then
+				r.concSpdShare = r.concSpd / concSpdTotal
+			end
 		end
 	end
 	local a, b = Cfg("abcA"), Cfg("abcB")
@@ -518,8 +531,14 @@ function ns.Recommendable(r, forConc)
 	if rank > min then return false, L["classe "] .. (abc or L["sem lucro"]) end
 	-- participação mínima nas vendas da profissão (ex.: 1% = itens que realmente giram)
 	local minShare = tonumber(Cfg("recoMinShare")) or 0.01
-	if (r.spdShare or 0) < minShare then
-		return false, string.format(L["só %.1f%% das vendas da profissão"], (r.spdShare or 0) * 100)
+	-- com concentração quem é vendido é o item de cima: a participação tem de ser a dele.
+	-- concSpdShare é campo novo e NÃO está nos dados já salvos (spdShare está, porque é antigo):
+	-- sem ele, cair para o do item base — ausência de dado não é prova de que vende pouco, e
+	-- reprovar aqui zeraria o plano inteiro até a profissão ser reaberta e reescaneada.
+	local share = r.spdShare
+	if forConc and r.concSpdShare then share = r.concSpdShare end
+	if (share or 0) < minShare then
+		return false, string.format(L["só %.1f%% das vendas da profissão"], (share or 0) * 100)
 	end
 	if forConc and r.concSpd and r.concSpd < (tonumber(Cfg("minSoldPerDay")) or 1) then
 		return false, ns.QIcon(2) .. L[" vende pouco"]
@@ -931,6 +950,7 @@ function Scanner.FinalizeUnknown(unknownRows, knownRows, charKey)
 		ComputeProfit(r)
 		r.abc, r.abcShare, r.abcFree, r.spdShare = nil, nil, nil, nil
 		r.concAbc, r.concAbcShare, r.mixAbc, r.mixAbcShare = nil, nil, nil, nil
+		r.concSpdShare = nil
 	end
 end
 
