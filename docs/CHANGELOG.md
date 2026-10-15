@@ -851,3 +851,43 @@ isso distorce algum tooltip precisa de teste no jogo.
   os 7 registrados são do Blizzard e de outros addons). Das 1.641 receitas, 1.641 calculam a operação
   normalmente; os 2 `opError` são iscas de pesca (profissão 2911), receitas sem níveis de qualidade,
   onde a API devolver nil é o correto — condição anterior ao patch.
+
+## v1.35.0 — lista de compras abaixo da fila e exclusão de itens um a um (pedido do Rafael)
+Pedido: "coloque a lista de compras abaixo da lista de craft, e quero que seja possível excluir da
+lista ordens individuais... eliminar ordens que têm valor muito alto ou que o usuário não veja a
+necessidade de fazer".
+
+- **Lista de compras abaixo da fila.** Em janela com `W >= 900` ela ia para a direita (duas colunas,
+  `twoCols`). Agora é sempre coluna única: fila em cima com a largura cheia, compras embaixo.
+  Efeito colateral bom: o sub-canvas da fila passou de ~523px para ~946px, então a tabela de pedidos
+  deixa de encolher — **coluna do nome de 85 → 290px** e a de reagentes de 70 → 132 (2 → 5 ícones).
+  É o que muda o `t52` (9 → 12 ícones) e o `t99` (todas as colunas 28px à esquerda, ver abaixo).
+- **Excluir uma fabricação do plano.** Antes só dava para desligar o plano inteiro (`incluir plano`):
+  o item do plano mostrava o texto "plano" e nenhum botão. Agora tem um `x`. A chave é a mesma que o
+  `Queue.Build` já usava para não repetir item que está na fila manual
+  (`char#prof#recipeID#variant`), e vai gravada na linha (`it.skipKey`) para o botão não ter de
+  remontá-la e arriscar divergir.
+- **Excluir um pedido lido.** A tabela de pedidos só tinha "Limpar" (todos). Ganhou uma coluna `x`
+  (`ODEL`, 20px, à direita do Pegar) — por isso as outras colunas andaram 28px (20 + `OGAP`).
+  O filtro é aplicado no `Queue.ReadOrders`, então o pedido continua fora mesmo relendo os pedidos.
+- **Fica gravado**, em `LucroCraftDB.queue.skip` (plano) e `.skipOrd` (pedidos, com data). Sem isso o
+  plano reporia no `Refresh` seguinte e o pedido voltaria na próxima leitura, que é o que torna a
+  exclusão útil. `skipOrd` é limpo depois de 30 dias (pedido expira em dias; não vale guardar para
+  sempre).
+- **Atende o objetivo pelo caminho certo:** a lista de compras é *derivada* da fila + pedidos, então
+  não existe "excluir item da lista de compras" — o que gera a compra é a fabricação. Excluindo a
+  linha, o material sai da lista sozinho. No teste: 9 → 4 materiais ao excluir uma fabricação.
+- **Caminho de volta:** no fim da lista de compras aparece "Excluídos por você: N do plano · N
+  pedidos" com o botão "Mostrar excluídos", senão o usuário se tranca fora do que escondeu.
+- `Queue.Render` passou a guardar a geometria resolvida em `cv._layout` — o harness não registra
+  `SetPoint`, então sem isso não havia como um teste afirmar que uma coisa está abaixo da outra.
+- Teste: t106.lua (coluna do `x` em 3 larguras sem invadir nada; exclusão do plano grava, não volta no
+  Build seguinte e encolhe a lista de compras; exclusão de pedido grava; contagem e restauração;
+  e o empilhamento conferido em `cv._layout` a 960px, que é justamente a largura em que o código
+  antigo abria duas colunas). Falha na v1.34.7.
+
+### Pendência encontrada de passagem (não mexi)
+`tools` de conferência de locale: 241 chaves `L["..."]` do módulo Craft não têm tradução EN —
+`Buy.lua` (44), `Sell.lua` (41), `RecipeShop.lua` (27), `SecondProf.lua` (17), `UI.lua` (2) e outras.
+É anterior a esta versão e contraria a regra 3 do CLAUDE.md. O `Livro` está completo (0 faltando), e as
+12 chaves novas desta versão têm EN.

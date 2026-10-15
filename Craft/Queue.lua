@@ -20,6 +20,51 @@ local function DB()
 	return LucroCraftDB.queue
 end
 
+-- ===== exclusões do usuário =====
+-- Tirar da fila uma fabricação do plano, ou um pedido lido, que não vale a pena (material caro demais,
+-- ou simplesmente não quer fazer). Fica gravado: senão o plano repõe no próximo Refresh e o pedido
+-- volta na próxima leitura. A lista de compras é derivada da fila + pedidos, então excluir aqui já
+-- tira o material da lista de compras — que é o motivo do pedido.
+local SKIP_ORD_TTL = 30 * 86400   -- pedido expira em dias; 30 dias limpa o que não volta mais
+local function Skip()
+	local q = DB()
+	q.skip = q.skip or {}         -- plano:  [char#prof#recipeID#variant] = true
+	q.skipOrd = q.skipOrd or {}   -- pedido: [orderID] = quando foi excluído
+	return q.skip, q.skipOrd
+end
+
+function Queue.SkipPlan(key)
+	if not key then return end
+	local skip = Skip()
+	skip[key] = true
+	Queue.Refresh()
+end
+
+function Queue.SkipOrder(x)
+	if not (x and x.id) then return end
+	local _, so = Skip()
+	so[x.id] = time()
+	for i, y in ipairs(Queue.orders) do
+		if y.id == x.id then table.remove(Queue.orders, i) break end
+	end
+	Queue.Refresh()
+end
+
+-- quantos estão escondidos agora (só conta pedido que ainda está na lista lida do jogo)
+function Queue.SkipCount()
+	local skip, so = Skip()
+	local nPlan, nOrd = 0, 0
+	for _ in pairs(skip) do nPlan = nPlan + 1 end
+	for _ in pairs(so) do nOrd = nOrd + 1 end
+	return nPlan, nOrd
+end
+
+function Queue.ClearSkips()
+	local q = DB()
+	q.skip, q.skipOrd = {}, {}
+	Queue.Refresh()
+end
+
 local function Short(char) return (char:match("^([^-]+)")) or char end
 
 local function FindRow(char, prof, recipeID)
@@ -101,12 +146,15 @@ function Queue.Build()
 	local manual = {}
 	for _, q in ipairs(DB().list) do manual[q.char .. "#" .. tostring(q.prof) .. "#" .. q.recipeID .. "#" .. q.variant] = true end
 	if Cfg("queueIncludePlan") and ns.Plan then
+		local skip = Skip()
 		local list = ns.Plan.Build()
 		for _, it in ipairs(list) do
 			for _, u in ipairs(it.char == me and it.used or {}) do
-				if not manual[it.char .. "#" .. tostring(it.prof) .. "#" .. u.row.recipeID .. "#conc"] then
+				local key = it.char .. "#" .. tostring(it.prof) .. "#" .. u.row.recipeID .. "#conc"
+				if not manual[key] and not skip[key] then
+					-- a chave vai na linha: o botão de excluir precisa dela igual à usada aqui
 					table.insert(items, { char = it.char, e = it.e, row = u.row, variant = "conc", n = u.crafts,
-						source = "plano", gold = u.gold })
+						source = "plano", gold = u.gold, skipKey = key })
 				end
 			end
 		end
@@ -554,14 +602,24 @@ function Queue.ReadOrders()
 	end
 	LucroCraftDB.ordersDebug = snap
 	local claimed = DB().claimed or {}
-	local known = 0
+	local _, skipOrd = Skip()
+	local agora = time()
+	for id, t in pairs(skipOrd) do
+		if type(t) ~= "number" or agora - t > SKIP_ORD_TTL then skipOrd[id] = nil end
+	end
+	local known, hidden = 0, 0
 	for _, o in ipairs(list) do
 		local okE, x = pcall(Eval, o)
 		if okE and x and not claimed[o.orderID] then
-			if x.row then known = known + 1 end
-			table.insert(Queue.orders, x)
+			if skipOrd[o.orderID] then
+				hidden = hidden + 1
+			else
+				if x.row then known = known + 1 end
+				table.insert(Queue.orders, x)
+			end
 		end
 	end
+	Queue.ordersHidden = hidden
 	-- sabe fazer primeiro; depois quem dá ponto de conhecimento; depois lucro
 	table.sort(Queue.orders, function(a, b)
 		if (a.row ~= nil) ~= (b.row ~= nil) then return a.row ~= nil end
@@ -751,10 +809,11 @@ local OCOL  = { cost = 76, reag = 132, reward = 118, profit = 84, time = 50, cla
 local OCMIN = { cost = 54, reag = 70,  reward = 54,  profit = 62, time = 34, claim = 72 }
 local OORDER = { "cost", "reag", "reward", "profit", "time", "claim" }
 local OGAP, ITEM_MIN = 8, 170
+local ODEL = 20   -- coluna do "x" (excluir o pedido da lista), à direita do Pegar
 function Queue.OrderCols(QW)
 	local w = {}
 	for _, k in ipairs(OORDER) do w[k] = OCOL[k] end
-	local fixed = 16 + OGAP * #OORDER
+	local fixed = 16 + OGAP * #OORDER + ODEL + OGAP
 	local total, mins = 0, 0
 	for _, k in ipairs(OORDER) do total = total + w[k]; mins = mins + OCMIN[k] end
 	local avail = QW - fixed - ITEM_MIN
@@ -765,7 +824,9 @@ function Queue.OrderCols(QW)
 		end
 	end
 	local c = { w = w }
-	c.claim = QW - 8 - w.claim
+	c.delW = ODEL
+	c.del = QW - 8 - ODEL
+	c.claim = c.del - OGAP - w.claim
 	c.time = c.claim - OGAP - w.time
 	c.profit = c.time - OGAP - w.profit
 	c.reward = c.profit - OGAP - w.reward
@@ -1042,12 +1103,11 @@ function Queue.Render(cv)
 	Card(4, L["Personagem"], V.ClassName(me, select(2, UnitClass("player"))), L["fabricar próximo usa este"])
 	y = y + 60
 
-	-- ===== 3 partes: painel (cartões, acima) · fila (esquerda) · lista de compras (direita) =====
-	-- cada parte tem os seus botões e a sua barra de rolagem
-	local twoCols = W >= 900
-	local LW = twoCols and math.floor(W * 0.56) or W
-	local RX = twoCols and (LW + 12) or 0
-	local RW = twoCols and (W - RX) or W
+	-- ===== 3 partes empilhadas: painel (cartões) · fila · lista de compras =====
+	-- A lista de compras ficava à direita da fila em janela larga. O Rafael pediu ela ABAIXO da fila,
+	-- então é sempre coluna única e cheia: a fila ganha toda a largura (a tabela de pedidos agradece)
+	-- e a lista de compras vem embaixo.
+	local LW, RX, RW = W, 0, W
 	local function Band(c, x, yy, w, title, right)
 		c:Box(x, yy, w, 20, 0.08, 0.13, 0.24, 0.95)
 		c:Box(x, yy + 19, w, 1, 0.83, 0.69, 0.22, 0.6)
@@ -1056,7 +1116,8 @@ function Queue.Render(cv)
 		return yy + 24
 	end
 	local viewH = cv.frame:GetHeight()
-	local paneH = twoCols and math.max(160, viewH - y - 64) or math.max(140, math.floor((viewH - y - 120) / 2))
+	-- a fila rola por dentro; sobra espaço fixo embaixo para a lista de compras caber sem rolar a aba
+	local paneH = math.max(160, viewH - y - 240)
 
 	-- ----- fila: título + botões -----
 	local qTop = y
@@ -1177,7 +1238,16 @@ function Queue.Render(cv)
 				qc:Button(QW - 30, ly + 8, 26, 20, "x", function() Queue.Add(m.char, m.prof, m.recipeID, m.variant, -m.n) end,
 					function(tt) tt:SetText(L["Tirar da fila"]) end)
 			else
-				qc:Text(QW - 80, ly + 10, L["|cff9d9d9dplano|r"], GameFontDisableSmall, 76, "CENTER")
+				-- item do plano: antes só dava para desligar o plano inteiro. Agora dá para tirar um só
+				-- (material caro demais, ou não quer fazer) e fica gravado, senão o plano o repõe.
+				qc:Text(QW - 104, ly + 10, L["|cff9d9d9dplano|r"], GameFontDisableSmall, 70, "CENTER")
+				if it.skipKey then
+					qc:Button(QW - 30, ly + 8, 26, 20, "x", function() Queue.SkipPlan(it.skipKey) end, function(tt)
+						tt:SetText(L["Tirar esta fabricação do plano"])
+						tt:AddLine(L["Esconde só esta. Fica gravado, e o material dela sai da lista de compras."], 1, 1, 1, true)
+						tt:AddLine(L["Para trazer de volta, use \"Mostrar excluídos\" no fim da lista de compras."], 0.6, 0.6, 0.6, true)
+					end)
+				end
 			end
 			ly = ly + ROW
 		end
@@ -1404,11 +1474,21 @@ function Queue.Render(cv)
 					end)
 				if claimedMine > 0 and b.Disable then b:Disable() end
 			end
+			-- excluir este pedido da lista (custo alto, ou não quer fazer): sai daqui e da lista de compras
+			qc:Button(OC.del, ly + 6, OC.delW, 20, "x", function() Queue.SkipOrder(x) end, function(tt)
+				tt:SetText(L["Tirar este pedido da lista"])
+				tt:AddLine(L["Esconde só este pedido, mesmo relendo os pedidos, e tira os materiais dele da lista de compras."], 1, 1, 1, true)
+				tt:AddLine(L["O pedido continua existindo no jogo: isto só limpa a sua lista."], 0.6, 0.6, 0.6, true)
+			end)
 			ly = ly + 34
 			end
 		end
 		if unknown > 0 then
 			qc:Text(8, ly + 2, "|cff9d9d9d" .. string.format(L["+%d pedidos de receitas que este personagem não sabe (ocultos)"], unknown) .. "|r", GameFontDisableSmall, QW - 16)
+			ly = ly + 18
+		end
+		if (Queue.ordersHidden or 0) > 0 then
+			qc:Text(8, ly + 2, "|cff9d9d9d" .. string.format(L["+%d pedidos que você excluiu"], Queue.ordersHidden) .. "|r", GameFontDisableSmall, QW - 16)
 			ly = ly + 18
 		end
 	end
@@ -1419,7 +1499,9 @@ function Queue.Render(cv)
 	local leftBottom = qTop + 50 + math.max(qVis, 40)
 
 	-- ----- lista de compras: foi para Mercado > Comprar (lá dá para comprar direto e ver se vale fabricar) -----
-	local sTop = twoCols and y or (leftBottom + 10)
+	local sTop = leftBottom + 10
+	-- geometria resolvida, para os testes conferirem o empilhamento sem precisar de SetPoint
+	cv._layout = { w = W, qTop = qTop, qBottom = leftBottom, shopTop = sTop, shopX = RX, shopW = RW, paneH = paneH }
 	Band(cv, RX, sTop, RW, L["Lista de compras"], L["descontando bolsa, banco e banco do bando"])
 	local nBuy = 0
 	for _, s in ipairs(shop) do if s.buy > 0 then nBuy = nBuy + 1 end end
@@ -1454,6 +1536,20 @@ function Queue.Render(cv)
 		tt:AddLine(L["A lista da fila e dos pedidos está no topo de Mercado > Comprar: com a casa de leilões aberta, compre item por item e veja se sai mais barato fabricar."], 1, 1, 1, true)
 	end)
 	sy = sy + 30
+	-- excluídos: quem tira um item precisa de um caminho de volta, senão fica preso
+	local nPlan, nOrd = Queue.SkipCount()
+	if nPlan + nOrd > 0 then
+		local partes = {}
+		if nPlan > 0 then table.insert(partes, string.format(L["%d do plano"], nPlan)) end
+		if nOrd > 0 then table.insert(partes, string.format(L["%d pedidos"], nOrd)) end
+		cv:Text(RX + 8, sy + 5, "|cff9d9d9d" .. string.format(L["Excluídos por você: %s"], table.concat(partes, " · ")) .. "|r",
+			GameFontDisableSmall, RW - 160)
+		cv:Button(RX + RW - 142, sy, 134, 22, L["Mostrar excluídos"], function() Queue.ClearSkips() end, function(tt)
+			tt:SetText(L["Mostrar excluídos"])
+			tt:AddLine(L["Traz de volta tudo o que você excluiu da fila e dos pedidos."], 1, 1, 1, true)
+		end)
+		sy = sy + 28
+	end
 	if cv._sList then cv._sList:Hide() end
 	cv:End(math.max(leftBottom, sy) + 10)
 end
