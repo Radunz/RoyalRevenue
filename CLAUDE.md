@@ -2,7 +2,7 @@
 
 Addon do Rafael que calcula qual craft da expansão atual dá mais lucro na casa de leilões (AH) e mantém um livro-caixa contábil de tudo que cada personagem ganha e gasta.
 
-Versão atual: **1.25.1** (ver `RoyalRevenue/RoyalRevenue.toc`). Histórico completo de cada versão, decisões e motivos: `docs/CHANGELOG.md`. Leia a seção da área antes de mexer nela.
+Versão atual: a do `## Version:` em `RoyalRevenue.toc` (não repetir aqui: ficava desatualizado). Histórico completo de cada versão, decisões e motivos: `docs/CHANGELOG.md`. Leia a seção da área antes de mexer nela.
 
 ## Como falar com o Rafael
 - Português do Brasil, informal, direto e curto. Depois de decidido o caminho, respostas práticas.
@@ -99,7 +99,7 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 ## Regras de código (aprendidas a duras penas)
 1. **Lua 5.1**: nada de `goto`/labels, `//`, bitwise nativo. Checar com `tools/check.sh` (`luac5.1 -p`).
 2. **Escopo**: `local` usado por função definida ANTES dele vira global nil. Declare antes, ou chame pela tabela (`Ledger.X`).
-3. **Textos**: a chave é o texto em PT (`L["..."]`). Toda chave nova precisa da tradução EN em `Craft/Locale.lua` ou `Livro/Locale.lua`. `%` literal em `string.format` = `%%`.
+3. **Textos**: a chave é o texto em PT (`L["..."]`). Toda chave nova precisa da tradução EN em `Craft/Locale.lua` ou `Livro/Locale.lua` — o `check.sh` **falha** sem ela. `%` literal em `string.format` = `%%`, e o número de `%s`/`%d` tem de bater entre a chave e a tradução.
 4. **Fonte do jogo** não tem `−`, `▲▼` nem `…`: usar `-` e `...`. Setas são texturas.
 5. **Valores secretos (Midnight)**: em combate e instância, argumentos de evento, nomes de NPC, tooltips e auras podem vir "secretos". Comparar ou concatenar um deles dá erro.
    - Todo handler que compara argumento começa com `if root.AnySecret(a1, a2, ...) then return end`.
@@ -127,7 +127,7 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 - `tests/harness*.lua` simulam a API do WoW, carregam um SavedVariables real de `tests/fixtures/` e todos os arquivos na ordem do `.toc`, e disparam ADDON_LOADED / PLAYER_LOGIN / PLAYER_ENTERING_WORLD.
   - `FIRE(evento, ...)` dispara um evento; cada FIRE é um quadro novo (`GetTime` +0,0001).
   - `RUNTIMERS()` roda os `C_Timer.After` pendentes.
-- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t111.lua**).
+- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t116.lua**).
 - **Os testes são de regressão por diff, não de passa/falha.** Fluxo para qualquer mudança:
   ```bash
   cp -r RoyalRevenue baseline/RoyalRevenue          # antes de mexer (ou extrair o zip da versão anterior)
@@ -145,9 +145,10 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
   todas as abas procurando o que é desenhado fora do canvas e colunas que invadem a seguinte — foi
   assim que apareceram o rótulo do gráfico saindo da janela e o `OrderCols` com posição negativa.
 - **`tools/loccheck.py`**: confere a regra 3 (toda chave `L["..."]` precisa de EN) e chaves
-  duplicadas. O `check.sh` chama em modo relatório; `--strict` derruba o check e é o que se quer
-  quando o acumulado de chaves sem EN estiver zerado. Limite: só enxerga `L["literal"]`, não rótulo
-  passado por variável.
+  duplicadas. O acumulado de 241 chaves sem EN foi zerado na v1.37.1, então o `check.sh` roda em
+  modo **estrito**: chave nova sem tradução **derruba o check**. `./tools/check.sh --solto` volta a
+  só relatar. Limite: só enxerga `L["literal"]`, não rótulo passado por variável (o `OHead(..., "Conc")`
+  da tabela de pedidos resolve `L[label]` lá dentro e passa batido).
 - Mudança nova → criar um `tN.lua` focado que imprime os números relevantes. Exemplos: t89 (Diário intercalado), t92 (agendamento do scan), t93 (anúncio absurdo).
 - Perfil de desempenho: `lua5.1 prof.lua` (tempo de cada aba), `lua5.1 -e 'TARGET=9' prof2.lua` (perfil inclusivo de uma aba do Craft), `lua5.1 -e 'MODE="livro"; TAB=5' prof3.lua`.
 - **As fixtures são o SavedVariables real da conta do Rafael** (personagens, ouro, transações). Não publicar o repositório.

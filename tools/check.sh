@@ -3,11 +3,11 @@
 #   1. sintaxe Lua 5.1 (a do WoW) em todos os arquivos do addon;
 #   2. tabelas de tradução (regra 3 do CLAUDE.md).
 #
-# A conferência de locale não derruba o check por causa do acumulado de chaves sem EN que já
-# existia quando ela foi criada. Com o acumulado zerado, trocar por --strict faz o check falhar
-# em qualquer chave nova sem tradução, que é o objetivo.
-# Uso: ./tools/check.sh          (sintaxe + relatório de locale)
-#      ./tools/check.sh --strict (falha também se faltar tradução)
+# O acumulado de 241 chaves sem EN foi zerado na v1.37.1, então a conferência de locale DERRUBA o
+# check: chave nova sem tradução não passa mais. `--solto` volta ao modo relatório, se um dia for
+# preciso commitar no meio de uma tradução.
+# Uso: ./tools/check.sh          (sintaxe + locale, falha se faltar tradução)
+#      ./tools/check.sh --solto  (só relata)
 cd "$(dirname "$0")/.."
 bad=0
 
@@ -15,10 +15,14 @@ for f in Brand.lua Shell.lua $(find Craft Livro -name '*.lua'); do luac5.1 -p "$
 [ $bad = 0 ] && echo "sintaxe ok"
 
 if command -v python >/dev/null 2>&1; then
-  if [ "$1" = "--strict" ]; then
-    python -I tools/loccheck.py --strict | tail -20 || bad=1
-  else
+  if [ "$1" = "--solto" ]; then
     python -I tools/loccheck.py | grep -vE "^     " | tail -8
+  else
+    # o status tem de vir do python: num pipe o $? é o do último comando (era o do tail, que
+    # sempre dá 0 — por isso o --strict não derrubava nada)
+    saida=$(python -I tools/loccheck.py --strict); rc=$?
+    printf '%s\n' "$saida" | grep -vE "^     \[" | tail -12
+    [ "$rc" -ne 0 ] && bad=1
   fi
 else
   echo "(python não encontrado: conferência de locale pulada)"

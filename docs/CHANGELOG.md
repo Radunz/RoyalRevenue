@@ -1114,3 +1114,31 @@ for mostrar um upgrade, mostra sempre o item com a melhor qualidade possível."
 ### Nota de migração
 `ComputeProfit` e `ApplyABC` só rodam no scan, então **os números mudam ao reabrir cada profissão**,
 não no `/reload`. É o mesmo comportamento da v1.35.3.
+
+## v1.37.1 — revisão e otimização: tradução EN completa e o check que não deixa regredir
+Passada de revisão pedida depois de implementar as quatro ideias.
+
+- **Revisão do código novo**: os 8 usos de `a and b or c` introduzidos na série foram conferidos um
+  a um — em todos o ramo `and` devolve string não-vazia ou o `nil` pretendido, então nenhum cai na
+  armadilha da regra 2. Nenhuma correção necessária.
+- **Desempenho** (mínimo de 3 execuções do `prof.lua`, porque esta máquina oscila muito — o
+  LOAD+LOGIN variou de 334 a 972 ms entre rodadas): nada piorou. `LOAD+LOGIN` -23 ms, aba Comprar
+  -6 ms, redraw das Receitas -7 ms; o único `+3 ms` (primeira abertura das Receitas) está dentro do
+  ruído e o redraw da mesma aba melhorou. Por construção também não há risco: `Projected` são 3
+  leituras de config por linha, `Absorcao` 3 por candidato, e o `Sane` reaproveita a consulta do TSM
+  que já é cacheada por 60 s.
+- **As 241 chaves sem tradução EN foram zeradas.** Eram `Buy.lua` (83), `Sell.lua` (75),
+  `RecipeShop.lua` (55) e `SecondProf.lua` (25) — tudo texto de tela que, em cliente em inglês,
+  aparecia em português. O adicionador confere que o número de `%s`/`%d` bate entre a chave e a
+  tradução, porque contagem diferente quebra o `string.format` só em tempo de execução.
+  - Uma chave tem espaço significativo no fim (`"o jogo recusou o anúncio: "`); removê-lo faz o
+    `L[]` nunca casar, e foi o que aconteceu na primeira tentativa.
+- **`check.sh` passou a rodar em modo estrito**: chave nova sem EN **derruba o check**. Conferido na
+  prática — com uma chave falsa o check sai com erro, sem ela sai limpo.
+  - E o estrito não funcionava: o `|| bad=1` pegava o status do `tail` no fim do pipe, que é sempre
+    0. Agora o status vem do python.
+  - `./tools/check.sh --solto` volta ao modo relatório.
+- `CLAUDE.md`: regra 3 agora diz que o check falha sem tradução; a "versão atual" deixou de ser
+  repetida no texto (vivia desatualizada, apontava 1.25.1).
+- Suíte: **83 testes, zero falhas, zero diferenças** — as traduções são aditivas e o harness roda em
+  ptBR, onde `L[k]` devolve a própria chave.
