@@ -196,6 +196,55 @@ end
 -- ===== Aba Auditoria =====
 -- O cálculo completo de uma receita, dentro da janela. Antes isso só saía em texto no chat,
 -- numa aba de log que podia nem existir (ou estar encaixada e nunca ser olhada).
+-- ===== receita selecionada na janela da profissao =====
+-- Nao ha uma API unica para isso: dependendo da versao o recipeID esta em um lugar diferente do
+-- ProfessionsFrame. Tenta os caminhos conhecidos, cada um sob pcall — se a Blizzard mudar de novo,
+-- o pior caso e nao acompanhar, nunca um erro.
+local function PeloCaminho(fn)
+	local ok, v = pcall(fn)
+	if ok and type(v) == "number" and v > 0 then return v end
+	return nil
+end
+
+function UI.SelectedRecipeID()
+	local pf = ProfessionsFrame
+	if not (pf and pf.IsShown and pf:IsShown()) then return nil end
+	local form = pf.CraftingPage and pf.CraftingPage.SchematicForm
+	if not form then return nil end
+	return PeloCaminho(function() return form.currentRecipeInfo.recipeID end)
+		or PeloCaminho(function() return form:GetRecipeInfo().recipeID end)
+		or PeloCaminho(function() return form.recipeSchematic.recipeID end)
+		or PeloCaminho(function() return form.transaction:GetRecipeID() end)
+end
+
+-- Acompanhar: o laco so roda enquanto a aba de Auditoria esta visivel (regra 9), e so faz trabalho
+-- quando o recipeID muda. Com "seguir" desligado a auditoria fica congelada na que voce fixou.
+function UI.AuditFollowing()
+	local cfg = LucroCraftDB.config or {}
+	return cfg.auditFollow ~= false
+end
+
+function UI.AuditFollow(recipeID, forcar)
+	if not recipeID or not ns.AuditTo then return false end
+	if not (forcar or UI.AuditFollowing()) then return false end
+	if ns.auditOut and ns.auditOut.recipeID == recipeID then return false end
+	ns.AuditTo(tostring(recipeID))
+	if ns.auditOut then ns.auditOut.recipeID = recipeID end
+	return true
+end
+
+local auditTicker
+function UI.AuditWatch(ligar)
+	if auditTicker then auditTicker:Cancel(); auditTicker = nil end
+	if not ligar then return end
+	auditTicker = C_Timer.NewTicker(0.5, function()
+		if not (frame and frame:IsShown() and frame.currentTab == TAB.AUDIT) then return end
+		if not UI.AuditFollowing() then return end
+		local id = UI.SelectedRecipeID()
+		if id and UI.AuditFollow(id) then UI.RefreshTab(TAB.AUDIT) end
+	end)
+end
+
 -- ===== aba Auditoria =====
 -- Era uma parede de texto: servia para copiar, não para entender. Agora desenha a partir da LINHA
 -- auditada (ns.auditOut.row) as quatro coisas que de fato resolvem um número errado — a conta
@@ -236,8 +285,23 @@ function UI.AuditView.Render(cv)
 	end
 	local age = out.t and (time() - out.t) or 0
 	local cru = ns.auditRaw and true or false
-	cv:Text(8, 4, string.format(L["|cffd4af37Auditoria|r  |cff9d9d9d%s · há %ds|r"], tostring(out.query or "?"), age),
-		GameFontNormal, W - 220)
+	cv:Text(146, 4, string.format(L["|cffd4af37Auditoria|r  |cff9d9d9d%s · há %ds|r"], tostring(out.query or "?"), age),
+		GameFontNormal, W - 360)
+	local seguindo = UI.AuditFollowing()
+	cv:Box(8, 6, 12, 12, 0.83, 0.69, 0.22, seguindo and 1 or 0.18)
+	cv:Text(24, 5, (seguindo and "|cffffffff" or "|cff8f8f8f") .. L["seguir seleção"] .. "|r",
+		GameFontHighlightSmall, 110)
+	cv:Hit(4, 2, 134, 18, function()
+		LucroCraftDB.config.auditFollow = not seguindo
+		if not seguindo then
+			local id = UI.SelectedRecipeID()
+			if id then UI.AuditFollow(id, true) end
+		end
+		UI.RefreshTab(TAB.AUDIT)
+	end, function(tt)
+		tt:SetText(L["seguir seleção"])
+		tt:AddLine(L["Ligado, a auditoria troca sozinha para a receita que você seleciona na janela da profissão. Desligado, fica parada na que está."], 1, 1, 1, true)
+	end)
 	cv:Button(W - 200, 2, 96, 18, cru and L["Ver desenho"] or L["Ver texto cru"], function()
 		ns.auditRaw = not ns.auditRaw
 		UI.RefreshTab(TAB.AUDIT)
@@ -1004,7 +1068,9 @@ local function OnRowClick(row, button)
 		-- a auditoria vai para a aba Auditoria (antes só saía em texto, numa aba de chat
 		-- que podia nem existir) e a janela troca para ela
 		if ns.AuditTo then
-			ns.AuditTo(tostring(r.recipeID))
+			-- pelo AuditFollow (forçado) para gravar o recipeID: sem isso o laço que acompanha a
+			-- seleção veria "mudou" no tique seguinte e sobrescreveria o que você acabou de pedir
+			UI.AuditFollow(r.recipeID, true)
 			UI.ShowTab(TAB.AUDIT)
 		else
 			ns.Audit(tostring(r.recipeID))
@@ -1038,6 +1104,11 @@ local function OnRowClick(row, button)
 		return
 	end
 	if C_TradeSkillUI.OpenRecipe then C_TradeSkillUI.OpenRecipe(r.recipeID) end
+	-- clique simples ja seleciona a receita no jogo; a auditoria acompanha na hora, sem esperar o
+	-- laco de 0,5 s e sem trocar de aba (quem quer a aba usa Alt+clique)
+	if r.recipeID and UI.AuditFollow(r.recipeID) and frame and frame.currentTab == TAB.AUDIT then
+		UI.RefreshTab(TAB.AUDIT)
+	end
 end
 
 local function CycleProfession(dir)
@@ -1531,6 +1602,8 @@ function UI.ShowTab(id)
 	if not frame:IsShown() then UI.Show() end
 	id = id or 1
 	frame.currentTab = id
+	-- o laco que acompanha a selecao so existe enquanto a aba de Auditoria esta aberta
+	if UI.AuditWatch then UI.AuditWatch(id == TAB.AUDIT) end
 	ns.root.SelectTab(frame.Tabs, id)
 	local mode = UI.ModeOf(id)
 	frame.lastTab = frame.lastTab or {}

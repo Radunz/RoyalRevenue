@@ -1142,3 +1142,27 @@ Passada de revisão pedida depois de implementar as quatro ideias.
   repetida no texto (vivia desatualizada, apontava 1.25.1).
 - Suíte: **83 testes, zero falhas, zero diferenças** — as traduções são aditivas e o harness roda em
   ptBR, onde `L[k]` devolve a própria chave.
+
+## v1.37.2 — a Auditoria acompanha a receita selecionada (pedido do Rafael)
+"podemos fazer a audit acompanhar a receita selecionada?"
+
+- Antes só o Alt+clique enchia a aba: auditar três receitas era trocar de aba três vezes. Agora a
+  aba segue sozinha a receita selecionada na janela da profissão.
+- **`UI.SelectedRecipeID()`**: não existe uma API única para "receita selecionada" — dependendo da
+  versão o `recipeID` está em `SchematicForm.currentRecipeInfo`, em `:GetRecipeInfo()`, em
+  `recipeSchematic` ou na `transaction`. Tenta os quatro caminhos, cada um sob `pcall`: se a Blizzard
+  mudar de lugar de novo, o pior caso é deixar de acompanhar, nunca um erro.
+- **O laço só vive enquanto a aba está aberta** (regra 9): `UI.AuditWatch` é ligado/desligado no
+  `ShowTab`, roda a cada 0,5 s e só faz trabalho quando o `recipeID` muda (`auditOut.recipeID`).
+- **Clique simples na lista** já chamava `C_TradeSkillUI.OpenRecipe`, ou seja, já selecionava a
+  receita no jogo. Agora leva a auditoria junto na hora, sem esperar o tique e **sem trocar de aba** —
+  quem quer a aba continua usando Alt+clique.
+- **Botão "seguir seleção"** no cabeçalho da aba (ligado por padrão, `auditFollow`): desligado,
+  congela a auditoria na receita que está, para você comparar com calma. O Alt+clique força mesmo
+  congelado.
+- O Alt+clique passou a ir pelo `UI.AuditFollow(id, true)` em vez de chamar o `AuditTo` direto: sem
+  gravar o `recipeID`, o laço veria "mudou" no tique seguinte e **sobrescreveria** o que você acabou
+  de pedir.
+- Teste: t116.lua (os quatro caminhos da API + janela fechada, seguir ligado/desligado, o forçado do
+  Alt+clique, não re-auditar a mesma receita, e o laço só vivo na aba).
+- `t115` muda de propósito: +1 texto e +1 caixa, que são o botão novo.

@@ -22,6 +22,7 @@ ns.DEFAULTS = {
 	volumeMinSpd = 10,   -- lista de receitas: lucrativa com pelo menos isto de vendas/dia = seção "Volume"
 	useStats = true,     -- considera multicraft / resourcefulness / ingenuity
 	trendDiscount = true,   -- desconta a tendência de QUEDA do preço na projeção de lucro
+	auditFollow = true,     -- a aba Auditoria segue a receita selecionada na janela da profissão
 	capByMarket = true,     -- limita os crafts do plano ao que o mercado absorve
 	absorbDays = 7,         -- horizonte de venda considerado (dias)
 	absorbShare = 0.05,     -- fatia do giro da região que você consegue tomar
