@@ -1210,3 +1210,34 @@ gravada com `%%`, enquanto a chave no código tem `%` simples — o texto vai di
 `AddLine`, não passa por `string.format`, então `%` ali é só um sinal de porcentagem. Com as duas
 grafias diferentes, o `L[]` nunca casava e o cliente em inglês veria o texto em português.
 O `check.sh` estrito pegou (`locale: 1 sem EN`) — foi a primeira vez que ele barrou algo de verdade.
+
+## v1.37.5 — a coluna "Vendas/dia (%)" tinha o próprio denominador (print do Rafael)
+"o ajuste somente foi feito para o Druid? o madunz ainda mostra 41% no sales/day"
+
+- **Não era por personagem.** A v1.37.3 corrigiu o `ApplyABC`, que alimenta o tooltip e o filtro de
+  recomendação — e isso funcionou (conferido: o SavedVariables já tinha `spdProjected` nas duas
+  linhas do Bouquet, ou seja, o rescan aconteceu). O que ficou para trás foi a **coluna da lista**,
+  que calcula a porcentagem dela mesma em `BuildView` (`v.spdPct`) e só excluía item de coleta:
+
+  ```lua
+  if type(v.spd) == "number" and not seen[id] and not v.gathered then total = total + v.spd end
+  ```
+
+  Duas contas para a mesma pergunta, com regras diferentes. O tooltip dizia uma coisa e a coluna
+  outra, e eu só tinha corrigido uma delas.
+- **O que mudou:** `BuildView` passou a usar as mesmas exclusões do `ApplyABC` — coleta, item que
+  não vai para a casa de leilões, e velocidade projetada do conteúdo do baú. A variante "conc" da
+  linha repassa `concProjected`, como já repassava `concNotAuctionable`.
+- **A coluna explica por que ficou de fora**, em vez de mostrar só o número: `(baú)` ou `(sem AH)`,
+  do mesmo jeito que já fazia com `(coleta)`. Sem isso, 209,4k sem porcentagem continua parecendo
+  venda de verdade.
+- `UI._BuildView()`: ponta de teste que devolve as linhas montadas, para o teste ler o `spdPct` real
+  em vez de reimplementar a regra — a primeira versão deste teste passava no baseline justamente
+  porque testava a minha cópia da conta, não o addon.
+- Teste: t118.lua (com a marca o baú fica fora; sem a marca ele marca 33,8% da coluna, que é o
+  comportamento antigo; item sem AH também fora).
+
+### Nota
+A fixture de teste é de 07/10 e não tem `spdProjected`, então o Bouquet dela ainda conta — é o
+retrato de quem não reabriu a profissão depois da v1.37.3. Nos dados reais do Rafael a marca já está
+gravada.

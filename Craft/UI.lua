@@ -474,6 +474,7 @@ local function Variants(r)
 			-- classe do item de cima (curva do ouro/ponto), não a do item base
 			abc = r.concAbc or false, abcShare = r.concAbcShare or false, abcFree = false,
 			notAuctionable = r.concNotAuctionable or false,
+			spdProjected = r.concProjected or false,
 		}, VIEW_MT))
 	end
 	-- mesma qualidade de cima trocando reagentes pela qualidade superior (sem gastar concentração)
@@ -578,14 +579,25 @@ local function BuildView()
 		for _, r in ipairs(entry.rows) do
 			for _, v in ipairs(Variants(r)) do table.insert(view, v) end
 		end
-		-- % das vendas/dia: participação de cada item (cada qualidade conta separado) no total da profissão
+		-- % das vendas/dia: participação de cada item (cada qualidade conta separado) no total da
+		-- profissão. As exclusões TÊM de ser as mesmas do ApplyABC, senão a coluna conta uma coisa e
+		-- o filtro de recomendação conta outra — foi o que aconteceu com o Bouquet of Herbs, que
+		-- saiu da participação no ApplyABC e continuou com 41% aqui:
+		--   coleta       · não é venda de craft;
+		--   sem AH       · item vinculado não tem para quem ser vendido;
+		--   projetado    · o número é a velocidade do CONTEÚDO do baú, não deste item.
+		local function ForaDaConta(v)
+			return v.gathered or v.notAuctionable or v.spdProjected
+		end
 		local total, seen = 0, {}
 		for _, v in ipairs(view) do
 			local id = v.itemID or v.recipeID
-			if type(v.spd) == "number" and not seen[id] and not v.gathered then seen[id] = true; total = total + v.spd end
+			if type(v.spd) == "number" and not seen[id] and not ForaDaConta(v) then
+				seen[id] = true; total = total + v.spd
+			end
 		end
 		for _, v in ipairs(view) do
-			v.spdPct = (total > 0 and type(v.spd) == "number" and not v.gathered) and (v.spd / total) or false
+			v.spdPct = (total > 0 and type(v.spd) == "number" and not ForaDaConta(v)) and (v.spd / total) or false
 			-- quantos crafts o estoque atual cobre (ao vivo)
 			if v.variant ~= "npc" and ns.Stock then
 				rawset(v, "craftable", ns.Stock.CraftsFor(v.parts) or false)
@@ -636,6 +648,8 @@ local function BuildView()
 		if state.offsets[i] > maxOffset then state.offsets[i] = maxOffset end
 	end
 end
+-- ponta de teste: as linhas montadas (com spdPct), sem depender de quais estão visíveis na tela
+UI._BuildView = function() BuildView(); return state.views end
 
 local function SecsText(s)
 	s = math.max(0, s or 0)
@@ -717,6 +731,12 @@ local function FillRow(row, r)
 		txt = SpdColor(n) .. txt .. "|r"
 		if r.gathered then
 			txt = txt .. " |cff9d9d9d(" .. L["coleta"] .. ")|r"
+		-- sem % a coluna ficava só com o número, que é pior: 209,4k parece venda de verdade.
+		-- Diz por que ficou de fora, como já se fazia com coleta.
+		elseif r.spdProjected then
+			txt = txt .. " |cff9d9d9d(" .. L["baú"] .. ")|r"
+		elseif r.notAuctionable then
+			txt = txt .. " |cff9d9d9d(" .. L["sem AH"] .. ")|r"
 		elseif r.spdPct then
 			local pct = r.spdPct * 100
 			txt = txt .. string.format(" |cff9d9d9d(%s)|r", pct >= 10 and string.format("%.0f%%", pct)
