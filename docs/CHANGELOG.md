@@ -1203,3 +1203,10 @@ considerar isso. 3. ele é 41% de vendas, ela fode com os cálculos dos demais i
   pelas cargas. No caso real: o Bouquet está com 1 de 2 cargas, próxima em 23,2 h.
 - Teste: t117.lua (participação com e sem o baú somando 100%, o 2º retorno do `SoldPerDay`, as
   cargas em 4 cenários e o teto entrando no plano).
+
+## v1.37.4 — a chave do aviso do baú com `%%` em vez de `%`
+Correção imediata da v1.37.3: a tradução EN do aviso "é a velocidade do conteúdo do baú" foi
+gravada com `%%`, enquanto a chave no código tem `%` simples — o texto vai direto para o
+`AddLine`, não passa por `string.format`, então `%` ali é só um sinal de porcentagem. Com as duas
+grafias diferentes, o `L[]` nunca casava e o cliente em inglês veria o texto em português.
+O `check.sh` estrito pegou (`locale: 1 sem EN`) — foi a primeira vez que ele barrou algo de verdade.
