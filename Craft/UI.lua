@@ -987,6 +987,11 @@ local function ShowTooltip(row)
 	if type(r.spd) == "number" then
 		GameTooltip:AddDoubleLine(P.SpdIsEstimate() and L["Vendas/dia (estimado)"] or L["Vendas/dia (região)"], string.format(L["%.2f  (%.1f%% do total)"], r.spd, (r.spdShare or 0) * 100),
 			1, 0.82, 0, 1, 1, 1)
+		-- baú: o número é do CONTEÚDO, não deste item. Sem dizer isso, 209 mil/dia de um item que
+		-- nem vai para a casa de leilões parece venda de verdade.
+		if r.spdProjected then
+			GameTooltip:AddLine(L["   é a velocidade do conteúdo do baú, não deste item: fica fora da % da profissão e da curva"], 0.6, 0.6, 0.6, true)
+		end
 	end
 	-- cada aba tem a sua curva ABC: concentração = ouro/ponto · sem concentração = margem
 	if r.abc and r.abcShare then

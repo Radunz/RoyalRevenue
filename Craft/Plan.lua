@@ -72,6 +72,10 @@ local function Allocate(cands, conc)
 			limite = math.floor(abs / unidades)
 			if n > limite then n = limite end
 		end
+		-- cargas (transmutação): o jogo só deixa fabricar enquanto houver carga, e elas voltam
+		-- ~1/dia. Planejar 10 crafts de uma receita com 2 cargas é prometer o que não dá para fazer.
+		local cargas = ns.Charges and select(1, ns.Charges(r))
+		if cargas and n > cargas then n = cargas; limite = nil end
 		if n > 0 then
 			left = left - n * per
 			gold = gold + n * r.perConc * per

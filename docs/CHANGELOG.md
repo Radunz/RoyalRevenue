@@ -1166,3 +1166,40 @@ Passada de revisão pedida depois de implementar as quatro ideias.
 - Teste: t116.lua (os quatro caminhos da API + janela fechada, seguir ligado/desligado, o forçado do
   Alt+clique, não re-auditar a mesma receita, e o laço só vivo na aba).
 - `t115` muda de propósito: +1 texto e +1 caixa, que são o botão novo.
+
+## v1.37.3 — o Bouquet of Herbs distorcia a profissão inteira (print do Rafael)
+"1. Ele não deve ser considerado no sales/day. 2. Ele é uma transmutação, tem carga, temos que
+considerar isso. 3. ele é 41% de vendas, ela fode com os cálculos dos demais itens."
+
+- **Causa.** O Bouquet of Herbs vincula ao pegar: não tem preço nem vendas na casa de leilões. Aí o
+  addon cai na projeção de baú — `Pricing.Sale` usa o valor do conteúdo (certo, é o que o baú vale)
+  e `Pricing.SoldPerDay` devolvia a **velocidade do conteúdo**: `Containers.SoldPerDay` retorna o
+  `SoldPerDay` do item mais valioso que sai do baú. São 209.356 vendas/dia — da erva, não do baú.
+  Valor e velocidade não são a mesma coisa: o valor do conteúdo responde "quanto vale", a velocidade
+  do conteúdo não responde "quantos baús o mercado absorve", porque o baú nem é vendido.
+- **Efeito medido na Alquimia do Madunz**: ele era **79,1%** das vendas da profissão e espremia todo
+  o resto contra o filtro de 1%. Sem ele, a distribuição real aparece:
+
+  | receita | antes | depois |
+  |---|---|---|
+  | Bouquet of Herbs | **79,1%** | — (fora) |
+  | Silvermoon Health Potion | 7,3% | **34,7%** |
+  | Light's Potential | 3,6% | **17,3%** |
+  | Entropic Extract | 2,7% | **12,8%** |
+  | Enlightenment Tonic | 1,8% | **8,5%** |
+
+- **O que mudou:**
+  - `Pricing.SoldPerDay` devolve um 2º valor dizendo que o número é projeção do conteúdo.
+  - `Scanner` guarda isso em `r.spdProjected`, e o `ApplyABC` mantém essas linhas **fora do total e
+    da participação** — mesmo tratamento que já existia para item de coleta e item que não vai para
+    a AH. O `r.concProjected`, que já existia, passou a ter o mesmo efeito.
+  - O tooltip passou a dizer que o número é do conteúdo, em vez de mostrar 209 mil/dia como se fosse
+    venda do item.
+  - `ns.IsAuctionable`: quando o cliente ainda não tem os dados do item, agora **pede ao servidor**.
+    Sem isso o "assume vendável" podia virar permanente — foi como um item BoP ficou com
+    `notAuctionable = nil` gravado na linha.
+- **Cargas (ponto 2).** `ns.Charges(r)` já existia e calculava as cargas disponíveis, mas **nada o
+  chamava**: o plano podia pedir 10 crafts de uma receita com 2 cargas. Agora o `Allocate` limita
+  pelas cargas. No caso real: o Bouquet está com 1 de 2 cargas, próxima em 23,2 h.
+- Teste: t117.lua (participação com e sem o baú somando 100%, o 2º retorno do `SoldPerDay`, as
+  cargas em 4 cenários e o teto entrando no plano).

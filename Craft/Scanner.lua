@@ -397,7 +397,13 @@ function ns.IsAuctionable(itemID)
 	local p = aucPending[itemID]
 	if p and time() - p < 30 then return true end
 	local bind = select(14, C_Item.GetItemInfo(itemID))
-	if not bind then aucPending[itemID] = time(); return true end
+	if not bind then
+		-- sem pedir, o item podia nunca entrar no cache e o "assume vendável" virava permanente:
+		-- foi assim que um item BoP ficou com notAuctionable = nil gravado na linha
+		if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
+		aucPending[itemID] = time()
+		return true
+	end
 	aucPending[itemID] = nil
 	local v = not (BIND_BOP[bind] or BIND_WARBAND[bind])
 	aucCache[itemID] = v
@@ -441,8 +447,11 @@ local function ApplyABC(rows)
 			r.concNotAuctionable = (not ns.IsAuctionable(concItem)) or nil
 		end
 		if not r.gathered then
-			if (r.spd or 0) > 0 and not r.notAuctionable then spdTotal = spdTotal + r.spd end
-			if (r.concSpd or 0) > 0 and not r.concNotAuctionable then concSpdTotal = concSpdTotal + r.concSpd end
+			-- projetado pelo conteúdo do baú não é venda deste item: fora do total e da participação
+			if (r.spd or 0) > 0 and not r.notAuctionable and not r.spdProjected then spdTotal = spdTotal + r.spd end
+			if (r.concSpd or 0) > 0 and not r.concNotAuctionable and not r.concProjected then
+				concSpdTotal = concSpdTotal + r.concSpd
+			end
 			-- resultado base (não gasta concentração): entra na curva da MARGEM
 			if not r.notAuctionable and (r.profit or 0) > 0 and (r.spd or 0) >= minSpd then
 				r.abcFree = true
@@ -479,12 +488,14 @@ local function ApplyABC(rows)
 	-- item base reprovava receita cuja qualidade alta gira muito, e aprovava o contrário.
 	if spdTotal > 0 then
 		for _, r in ipairs(rows) do
-			if not r.gathered and not r.notAuctionable and (r.spd or 0) > 0 then r.spdShare = r.spd / spdTotal end
+			if not r.gathered and not r.notAuctionable and not r.spdProjected and (r.spd or 0) > 0 then
+				r.spdShare = r.spd / spdTotal
+			end
 		end
 	end
 	if concSpdTotal > 0 then
 		for _, r in ipairs(rows) do
-			if not r.gathered and not r.concNotAuctionable and (r.concSpd or 0) > 0 then
+			if not r.gathered and not r.concNotAuctionable and not r.concProjected and (r.concSpd or 0) > 0 then
 				r.concSpdShare = r.concSpd / concSpdTotal
 			end
 		end
@@ -841,7 +852,14 @@ local function PriceRow(r)
 	local s, spd
 	if r.saleLink then s, spd = P.SaleByLink(r.saleLink) end
 	r.sale = s or P.Sale(r.itemID)
-	r.spd = spd or P.SoldPerDay(r.itemID)
+	local spdProj
+	if spd then
+		r.spd = spd
+	else
+		r.spd, spdProj = P.SoldPerDay(r.itemID)
+	end
+	-- baú: o número é a velocidade do CONTEÚDO. Serve para avaliar, não para medir o giro do baú.
+	r.spdProjected = spdProj or nil
 	r.lowVolume = (r.spd or 0) < (tonumber(Cfg("minSoldPerDay")) or 1)
 	r.trend = P.Trend(r.itemID)
 	r.concSale, r.concSpd, r.concTrend = nil, nil, nil

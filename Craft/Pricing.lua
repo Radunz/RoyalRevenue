@@ -269,7 +269,12 @@ function Pricing.SoldPerDay(itemID)
 	if Pricing.HasTSM() then
 		local v = TSMValue("DBRegionSoldPerDay * 1000", itemID)
 		if v then return v / 1000 end
-		return ns.Containers and ns.Containers.Get(itemID) and ns.Containers.SoldPerDay(itemID) or nil
+		-- 2º retorno = "isto é projeção do conteúdo do baú, não venda DESTE item". O Bouquet of
+		-- Herbs herdava as 209.356 vendas/dia da erva que sai dele e virava 76% da profissão.
+		if ns.Containers and ns.Containers.Get(itemID) then
+			return ns.Containers.SoldPerDay(itemID), true
+		end
+		return nil
 	end
 	if not ns.Own then return nil end
 	if Pricing.HasAuctionator() then
