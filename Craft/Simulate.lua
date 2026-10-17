@@ -108,17 +108,24 @@ function Sim.Avaliar(r, e, combo, conc)
 
 	-- custo dos reagentes desta combinação
 	local custo, semPreco = 0, false
-	local rotulos = {}
+	local rotulos, escolhidos = {}, {}
 	for i, p in ipairs(r.parts or {}) do
 		local opts = p.qualityItems or { p.itemID }
 		local id = opts[combo[i] or 1] or opts[1]
 		local unit = P.Cost(id)
 		if unit then custo = custo + unit * (p.qty or 1) else semPreco = true end
-		if #opts > 1 then table.insert(rotulos, ns.QIcon(QualIndex(p, id), #opts, 11)) end
+		if #opts > 1 then
+			local q = QualIndex(p, id)
+			table.insert(rotulos, ns.QIcon(q, #opts, 11))
+			-- a tela desenha o ícone do item com a marca de qualidade; o rótulo em texto fica para
+			-- a ordenação e para os testes, que não leem textura
+			table.insert(escolhidos, { itemID = id, q = q, maxQ = #opts, qty = p.qty or 1, unit = unit })
+		end
 	end
 	linha.cost = custo
 	linha.semPreco = semPreco or nil
 	linha.label = table.concat(rotulos)
+	linha.reagentes = escolhidos
 
 	if not op then linha.semOp = true return linha end
 
@@ -231,11 +238,15 @@ end
 
 -- ===== tela =====
 -- Colunas: Reagentes · Custo · Perícia · Qualidade · Concentração · Lucro · Lucro/ponto · Crafts · Total
-local COL = { cost = 78, skill = 56, quality = 54, conc = 62, profit = 86, perConc = 80, crafts = 58, total = 96 }
+-- Larguras folgadas de propósito: a aba usa a janela inteira e sobrava espaço morto. Número de
+-- ouro apertado é número que se lê errado.
+local COL = { cost = 92, skill = 62, quality = 60, conc = 72, profit = 102, perConc = 96, crafts = 64, total = 112 }
 local ORDEM = { "cost", "skill", "quality", "conc", "profit", "perConc", "crafts", "total" }
 local GAP, REAG_MIN = 8, 120
+local ICON, ICON_GAP = 26, 6   -- ícone do reagente e o espaço entre eles
+Sim.ICON, Sim.LINHA = ICON, 32
 
-function Sim.Cols(W)
+function Sim.Cols(W, nSlots)
 	local c, x = { w = COL }, W - 8
 	for i = #ORDEM, 1, -1 do
 		local k = ORDEM[i]
@@ -244,7 +255,9 @@ function Sim.Cols(W)
 		x = x - GAP
 	end
 	c.reag = 8
-	c.reagW = math.max(REAG_MIN, c.cost - GAP - 8)
+	-- a coluna dos reagentes cabe os ícones de todos os slots; sobra tela, não precisa apertar
+	local preciso = 8 + (nSlots or 1) * (ICON + ICON_GAP)
+	c.reagW = math.max(REAG_MIN, math.min(preciso, c.cost - GAP - 8))
 	return c
 end
 
@@ -306,7 +319,7 @@ function Sim.Render(cv)
 	end
 
 	-- cabeçalho da tabela
-	local c = Sim.Cols(W)
+	local c = Sim.Cols(W, #Sim.Slots(r))
 	local s = Sim.Sort()
 	local function Head(x0, w, key, rotulo, just)
 		local seta = (s.key == key) and (s.desc and " v" or " ^") or ""
@@ -325,14 +338,32 @@ function Sim.Render(cv)
 	Head(c.total, COL.total, "total", "Total")
 	y = y + 18
 
+	local ALT = Sim.LINHA
 	for i, x in ipairs(linhas) do
-		root.Zebra(cv, i, 0, y - 1, W, 18)
+		root.Zebra(cv, i, 0, y - 1, W, ALT)
 		-- a melhor pelo total ganha fundo verde
-		if x == melhorTotal and (x.totalGold or 0) > 0 then cv:Box(0, y - 1, W, 18, 0.3, 1, 0.3, 0.12) end
-		cv:Text(c.reag, y + 1, x.label or "", GameFontHighlightSmall, c.reagW)
-		cv:Text(c.cost, y + 1, x.cost and G(x.cost) or "—", GameFontHighlightSmall, COL.cost, "RIGHT")
-		cv:Text(c.skill, y + 1, tostring(x.skill or "—"), GameFontDisableSmall, COL.skill, "RIGHT")
-		cv:Text(c.quality, y + 1, x.quality and ns.QIcon(x.quality, r.maxQuality, 12) or "—",
+		if x == melhorTotal and (x.totalGold or 0) > 0 then cv:Box(0, y - 1, W, ALT, 0.3, 1, 0.3, 0.12) end
+		-- ícone de cada reagente escolhido, com a marca de qualidade: dá para ler a combinação de
+		-- relance, sem decifrar estrelas
+		local rx = c.reag
+		for _, g in ipairs(x.reagentes or {}) do
+			cv:Icon(rx, y + 2, ICON, V.ItemIcon(g.itemID), {
+				quality = ns.QIcon(g.q, g.maxQ, 11),
+				count = tostring(g.qty),
+				rarity = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(g.itemID) or nil,
+				link = select(2, C_Item.GetItemInfo(g.itemID)),
+				tip = function(tt)
+					tt:SetItemByID(g.itemID)
+					tt:AddLine(" ")
+					tt:AddDoubleLine(L["Precisa"], tostring(g.qty), 1, 0.82, 0, 1, 1, 1)
+					tt:AddDoubleLine(L["Custo"], g.unit and G(g.unit * g.qty) or L["sem preço"], 1, 0.82, 0, 1, 1, 1)
+				end })
+			rx = rx + ICON + ICON_GAP
+		end
+		local ty = y + math.floor((ALT - 12) / 2)
+		cv:Text(c.cost, ty, x.cost and G(x.cost) or "—", GameFontHighlightSmall, COL.cost, "RIGHT")
+		cv:Text(c.skill, ty, tostring(x.skill or "—"), GameFontDisableSmall, COL.skill, "RIGHT")
+		cv:Text(c.quality, ty, x.quality and ns.QIcon(x.quality, r.maxQuality, 14) or "—",
 			GameFontHighlightSmall, COL.quality, "CENTER")
 		local concTxt = "—"
 		if x.semConc then
@@ -340,15 +371,16 @@ function Sim.Render(cv)
 		elseif x.conc then
 			concTxt = ns.ConcStr(x.conc, e and e.professionID)
 		end
-		cv:Text(c.conc, y + 1, concTxt, GameFontHighlightSmall, COL.conc, "CENTER")
+		cv:Text(c.conc, ty, concTxt, GameFontHighlightSmall, COL.conc, "CENTER")
 		local lucro = x.concProfit or x.profit
-		cv:Text(c.profit, y + 1, lucro and G(lucro, true) or "—", GameFontHighlightSmall, COL.profit, "RIGHT")
-		cv:Text(c.perConc, y + 1, x.perConc and P.FormatMoney(x.perConc) or "—", GameFontHighlightSmall, COL.perConc, "RIGHT")
+		cv:Text(c.profit, ty, lucro and G(lucro, true) or "—", GameFontHighlightSmall, COL.profit, "RIGHT")
+		cv:Text(c.perConc, ty, x.perConc and P.FormatMoney(x.perConc) or "—", GameFontHighlightSmall, COL.perConc, "RIGHT")
 		-- sem concentração o limite é material/ouro: marca como livre em vez de competir no mesmo eixo
 		local craftsTxt = x.crafts and tostring(x.crafts) or (x.semConc and L["|cff55ff55livre|r"] or "—")
-		cv:Text(c.crafts, y + 1, craftsTxt, GameFontHighlightSmall, COL.crafts, "RIGHT")
-		cv:Text(c.total, y + 1, x.totalGold and G(x.totalGold, true) or "—", GameFontNormalSmall, COL.total, "RIGHT")
-		cv:Hit(0, y - 1, W, 18, nil, function(tt)
+		cv:Text(c.crafts, ty, craftsTxt, GameFontHighlightSmall, COL.crafts, "RIGHT")
+		cv:Text(c.total, ty, x.totalGold and G(x.totalGold, true) or "—", GameFontNormalSmall, COL.total, "RIGHT")
+		-- a área de tooltip da linha começa depois dos ícones, que têm o seu próprio
+		cv:Hit(c.cost - GAP, y - 1, W - (c.cost - GAP), ALT, nil, function(tt)
 			tt:SetText(r.name or "?")
 			tt:AddLine(" ")
 			for j, p in ipairs(r.parts or {}) do
@@ -374,7 +406,7 @@ function Sim.Render(cv)
 			if x.semPreco then tt:AddLine(L["Algum reagente está sem preço: o custo está incompleto."], 1, 0.6, 0.2, true) end
 			if x.semOp then tt:AddLine(L["O jogo não respondeu a operação desta combinação (abra a profissão)."], 1, 0.6, 0.2, true) end
 		end)
-		y = y + 18
+		y = y + ALT
 	end
 
 	if cortou then

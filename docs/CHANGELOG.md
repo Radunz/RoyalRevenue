@@ -1443,3 +1443,23 @@ afeta a concentração e quantas vezes eu conseguiria craftar mais vezes se muda
 
 ### Atenção
 O `.toc` ganhou um arquivo, então **precisa reiniciar o WoW** — `/reload` não basta desta vez.
+
+## v1.39.1 — ícone do item na coluna de reagentes da aba Simular (pedido do Rafael)
+"consegue colocar o ícone do item com a qualidade? pelo que notei ainda temos bastante tela
+disponível, não necessitamos poupar espaço."
+
+- A coluna de reagentes mostrava só as estrelas (`★1★2★1`), o que obriga a decorar a ordem dos
+  slots. Agora mostra o **ícone de cada item escolhido**, com a marca de qualidade no canto, a
+  quantidade e a borda de raridade. Dá para ler a combinação de relance.
+  - Cada ícone tem o próprio tooltip (item, quantidade e custo daquele slot); a área de tooltip da
+    linha começa depois deles, para não roubar o mouse.
+  - O rótulo em texto continua existindo na linha: é o que ordena e o que os testes leem, já que
+    teste não enxerga textura.
+- **Tela folgada**, como pedido: a linha passou de 18 para 32px, o ícone é de 26px, e as colunas de
+  número foram alargadas (Custo 78→92, Lucro 86→102, Lucro/ponto 80→96, Total 96→112). Sobrava
+  espaço morto entre os reagentes e o Custo, e número de ouro apertado é número que se lê errado.
+  - A coluna de reagentes cresce com o número de slots: 5 slots pedem 168px e cabem com 68px de
+    folga até o Custo.
+- Teste: t126.lua passou a conferir que os ícones aparecem (4 combinações × 2 slots + 1 do cabeçalho
+  = 9) e que cada linha sabe o item e a qualidade de cada slot. No código anterior ele acusa
+  **1 ícone em vez de 9**.

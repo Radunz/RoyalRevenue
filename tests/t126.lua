@@ -100,6 +100,19 @@ local cv = LucroCraftFrame.canvases[C.UI.TAB.SIM]
 local tot, fora = G.Check(cv)
 print(string.format("  %d widgets · %d fora do canvas · %d textos", tot, #fora, cv.used.text or 0))
 for i = 1, math.min(3, #fora) do print("     " .. fora[i]) end
+-- v1.39.1: a coluna de reagentes mostra o ICONE do item com a marca de qualidade, nao so estrelas.
+-- 4 combinacoes x 2 slots com escolha + 1 icone do cabecalho = 9
+local icones = cv.used.icon or 0
+local esperadoIcones = #linhas * 2 + 1
+print(string.format("  icones de reagente: %d (esperado %d)", icones, esperadoIcones))
+-- e cada linha sabe qual item foi escolhido em cada slot
+local comReagentes = 0
+for _, x in ipairs(linhas) do
+	if x.reagentes and #x.reagentes == 2 and x.reagentes[1].itemID and x.reagentes[1].q then
+		comReagentes = comReagentes + 1
+	end
+end
+print(string.format("  linhas que sabem o item e a qualidade de cada slot: %d de %d", comReagentes, #linhas))
 
 C.Pricing.Cost, C.Pricing.Sale = origCost, origSale
 
@@ -110,6 +123,7 @@ local ok = #linhas == 4 and barato ~= melhor
 	and (melhor.totalGold or 0) > (barato.totalGold or 0)
 	and (melhor.crafts or 0) > (barato.crafts or 0)
 	and semConcLivre
+	and icones == esperadoIcones and comReagentes == #linhas
 	and #l2 == 0 and #fora == 0 and (cv.used.text or 0) > 10
 print(ok and "OK: simula todas as combinacoes, mostra que o barato rende menos, e a aba desenha limpa"
 	or string.format("FALHA (linhas=%d barato=%s melhor=%s fora=%d)",
