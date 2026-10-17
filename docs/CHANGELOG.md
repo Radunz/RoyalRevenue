@@ -1367,3 +1367,45 @@ tecido, vende 6.093/dia de verdade, sem projeção e sem vínculo.
 **Dominar não é defeito.** O defeito é dominar *sem ser venda real* — projeção de baú ou item que
 nem vai para a casa de leilões, que foi o caso do Bouquet. O teste passou a acusar só isso, e
 ignora profissão com menos de 10 receitas, onde participação não significa nada.
+
+## v1.38.3 — preço que existe no papel e não se realiza (print do Rafael)
+"contou um lucro de 200k de gold, porém é um ganho que não consigo realizar, a receita não vende por
+esse preço no goldrinn, e se colocar em outros o valor vai a 1/4" — era uma fórmula de encantamento
+que caiu numa imersão.
+
+- **Onde estava**: não era lucro de craft. O Diário do Uriuri tem um lançamento de **167.865,42g**
+  em 14/10, conta 3.2.03, item **256753**, de "The Labyrinth of Kindo'jan · Delves". É o Livro
+  avaliando o drop.
+- **Causa**: `Livro/Price.lua` usava `first(DBMarket, DBRegionMarketAvg, DBMinBuyout)` — o preço do
+  **seu reino primeiro**. Num mercado raso (fórmula rara), um número alto em Goldrinn vira "valor de
+  mercado", e é exatamente o que o Rafael descreveu ao dizer que fora dali vale 1/4.
+- **Correção**: o valor passa a ser o **menor entre o do reino e a média da região**, caindo para o
+  que existir quando só há um dos dois. É a mesma regra que o módulo de craft já usa no `saleSource`.
+  O Livro é contabilidade: o que entra tem de ser o que dá para realizar, não o melhor número que
+  existe em algum lugar.
+  - O próprio arquivo já reconhecia essa armadilha para equipamento ("um único anúncio absurdo vira
+    o valor de mercado"); agora vale para qualquer item.
+
+### E um buraco no lado do craft, achado no caminho
+O `saleSource` padrão já é `min(reino, região)`. Mas **equipamento é precificado pelo item string**
+(nível de item exato), e aí a região quase nunca tem dado: o `min()` não resolve, o código cai no
+`SALE_FALLBACK` e pega `DBMinBuyout` **cru**. Nos dados do Uriuri isso aparece claramente:
+
+| item | DBMarket (reino) | DBMinBuyout | razão |
+|---|---|---|---|
+| Embossed Sin'dorei Fur Rug | 2.754g | 10.070g | 3,7× |
+| Leather-Bound Haranir Wall Shelf | 2.260g | 8.078g | 3,6× |
+| Sin'dorei Jeweler's Cover | 4.201g | 7.031g ← **usado** | 1,7× |
+
+`Pricing.BoundBySale` limita o anúncio ao valor de mercado do reino quando passa de
+`saleMaxOverMarket` vezes (padrão 2; 0 desliga). Um anúncio sozinho muito acima não é o preço que
+você consegue — você entraria abaixo dele.
+
+- Teste: t125.lua (o caso da imersão com os números reais, os dois lados, e o teto configurável).
+
+### Ressalvas
+- **O lançamento de 14/10 fica como está.** A mudança vale para o que entrar daqui para a frente;
+  corrigir um lançamento passado é mexer na contabilidade e é decisão do Rafael.
+- **A suíte não mudou em nada**, porque o harness não tem TSM e esse caminho não é exercitado. O
+  t125 testa a regra isolada, mas o efeito real só dá para ver no jogo. É uma lacuna de cobertura
+  conhecida.

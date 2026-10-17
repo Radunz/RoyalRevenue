@@ -22,6 +22,7 @@ ns.DEFAULTS = {
 	volumeMinSpd = 10,   -- lista de receitas: lucrativa com pelo menos isto de vendas/dia = seção "Volume"
 	useStats = true,     -- considera multicraft / resourcefulness / ingenuity
 	trendDiscount = true,   -- desconta a tendência de QUEDA do preço na projeção de lucro
+	saleMaxOverMarket = 2,  -- anúncio acima de N x o mercado do reino não vira preço (0 = sem teto)
 	auditFollow = true,     -- a aba Auditoria segue a receita selecionada na janela da profissão
 	capByMarket = true,     -- limita os crafts do plano ao que o mercado absorve
 	absorbDays = 7,         -- horizonte de venda considerado (dias)
@@ -169,6 +170,19 @@ local function TSMValue(priceStr, itemID) return root.TSMPrice(priceStr, "i:" ..
 -- curva ABC, e o número sai errado sem nenhum sinal. Quando dá para comparar com o TSM, um valor
 -- assim é descartado em vez de usado.
 Pricing.SANE_RATIO = 20
+
+-- ===== teto do preço de venda =====
+-- Um anúncio sozinho muito acima do mercado não é o preço que você vai conseguir: você entraria
+-- abaixo dele. Quando o menor anúncio passa de `saleMaxOverMarket` vezes o valor de mercado do
+-- reino, a projeção usa o mercado. Medido nos dados do Uriuri, onde o DBMinBuyout batia 3,6x o
+-- DBMarket em várias peças de Couro — exatamente o "o valor vai a 1/4" que ele relatou.
+function Pricing.BoundBySale(v, ref)
+	if not v or not ref or ref <= 0 then return v end
+	local k = tonumber(ns.Cfg("saleMaxOverMarket")) or 2
+	if k <= 0 then return v end
+	if v > ref * k then return ref end
+	return v
+end
 local avisado = {}
 local function Sane(itemID, v, ref)
 	if not v or v <= 0 or not ref or ref <= 0 then return v end
@@ -205,7 +219,9 @@ function Pricing.Sale(itemID)
 	if Pricing.HasTSM() then
 		local v = TSMValue(Cfg("saleSource"), itemID)
 		if v then return v end
-		v = TSMValue(SALE_FALLBACK, itemID)
+		-- sem o par da região o min() do saleSource não resolve: o fallback vem cru e precisa de teto
+		v = Pricing.BoundBySale(TSMValue(SALE_FALLBACK, itemID),
+			TSMValue("first(DBMarket, DBRegionMarketAvg, DBHistorical)", itemID))
 		if v then return v end
 	end
 	if Pricing.HasAuctionator() then
@@ -385,7 +401,13 @@ local function TSMValueStr(priceStr, itemString) return root.TSMPrice(priceStr, 
 function Pricing.SaleByLink(link)
 	local is = TSMItemString(link)
 	if not is or is:match("^i:%d+$") then return nil end
-	local v = TSMValueStr(Cfg("saleSource"), is) or TSMValueStr(SALE_FALLBACK, is)
+	-- equipamento é precificado pelo item string (nível de item exato), e aí a região quase nunca
+	-- tem dado: o saleSource devolve nil e o fallback entrega o DBMinBuyout cru. Daí o teto.
+	local v = TSMValueStr(Cfg("saleSource"), is)
+	if not v then
+		v = Pricing.BoundBySale(TSMValueStr(SALE_FALLBACK, is),
+			TSMValueStr("first(DBMarket, DBRegionMarketAvg, DBHistorical)", is))
+	end
 	local spd = TSMValueStr("DBRegionSoldPerDay * 1000", is)
 	return v, spd and spd / 1000 or nil, is
 end

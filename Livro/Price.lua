@@ -9,12 +9,26 @@ local L = ns.L
 local P = {}
 ns.P = P
 
-local TSM_STR = "first(DBMarket, DBRegionMarketAvg, DBMinBuyout)"
 
+-- Preço do item: o MENOR entre o do seu reino e a média da região.
+-- Pegar o do reino primeiro (era `first(DBMarket, ...)`) faz um mercado raso virar "valor de
+-- mercado": a fórmula que caiu numa imersão foi lançada a 167.865g porque Goldrinn tinha esse
+-- número, e na região ela vale cerca de 1/4 disso. O Livro é contabilidade — o que entra tem de
+-- ser o que dá para realizar, não o melhor número que existe em algum lugar.
+-- Esta é a mesma regra que o módulo de craft já usa no `saleSource`.
 local function TSMValue(itemID)
-	local v = root.TSMPrice(TSM_STR, "i:" .. itemID)
+	local is = "i:" .. itemID
+	local reino = root.TSMPrice("DBMarket", is)
+	local regiao = root.TSMPrice("DBRegionMarketAvg", is)
+	local v
+	if reino and regiao then
+		v = math.min(reino, regiao)
+	else
+		v = reino or regiao or root.TSMPrice("DBMinBuyout", is)
+	end
 	if v and v > 0 then return v end
 end
+P._TSMValue = TSMValue
 
 local function AuctionatorValue(itemID)
 	local v = root.AtrPrice(itemID)
