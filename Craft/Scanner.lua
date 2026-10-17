@@ -447,11 +447,9 @@ local function ApplyABC(rows)
 			r.concNotAuctionable = (not ns.IsAuctionable(concItem)) or nil
 		end
 		if not r.gathered then
-			-- projetado pelo conteúdo do baú não é venda deste item: fora do total e da participação
-			if (r.spd or 0) > 0 and not r.notAuctionable and not r.spdProjected then spdTotal = spdTotal + r.spd end
-			if (r.concSpd or 0) > 0 and not r.concNotAuctionable and not r.concProjected then
-				concSpdTotal = concSpdTotal + r.concSpd
-			end
+			-- o denominador usa exatamente a mesma regra do numerador (ns.CountsInShare)
+			if ns.CountsInShare(r, false) then spdTotal = spdTotal + r.spd end
+			if ns.CountsInShare(r, true) then concSpdTotal = concSpdTotal + r.concSpd end
 			-- resultado base (não gasta concentração): entra na curva da MARGEM
 			if not r.notAuctionable and (r.profit or 0) > 0 and (r.spd or 0) >= minSpd then
 				r.abcFree = true
@@ -488,16 +486,12 @@ local function ApplyABC(rows)
 	-- item base reprovava receita cuja qualidade alta gira muito, e aprovava o contrário.
 	if spdTotal > 0 then
 		for _, r in ipairs(rows) do
-			if not r.gathered and not r.notAuctionable and not r.spdProjected and (r.spd or 0) > 0 then
-				r.spdShare = r.spd / spdTotal
-			end
+			if ns.CountsInShare(r, false) then r.spdShare = r.spd / spdTotal end
 		end
 	end
 	if concSpdTotal > 0 then
 		for _, r in ipairs(rows) do
-			if not r.gathered and not r.concNotAuctionable and not r.concProjected and (r.concSpd or 0) > 0 then
-				r.concSpdShare = r.concSpd / concSpdTotal
-			end
+			if ns.CountsInShare(r, true) then r.concSpdShare = r.concSpd / concSpdTotal end
 		end
 	end
 	local a, b = Cfg("abcA"), Cfg("abcB")
@@ -530,6 +524,80 @@ Scanner.ApplyABC = ApplyABC
 local ABC_RANK = { A = 1, B = 2, C = 3 }
 -- aberturas de baú abaixo disso = projeção fraca (média de 3 aberturas não é preço)
 ns.MIN_OPENS = 10
+
+-- ===== as duas contas que não podem divergir =====
+-- Escrever a mesma regra em dois lugares foi a causa dos três últimos números errados
+-- (spdShare x spdPct, e o lucro pelo preço cru em Invest e nos tooltips). Daqui para a frente
+-- quem precisar da resposta chama estas funções, não reescreve a conta.
+
+-- Esta linha conta na participação de vendas da profissão?
+--   coleta    · não é venda de craft;
+--   sem AH    · item vinculado não tem para quem ser vendido;
+--   projetado · o número é a velocidade do CONTEÚDO do baú, não deste item.
+-- Serve tanto para a linha de receita (ApplyABC) quanto para a linha da tela (BuildView), que
+-- repassa os mesmos campos.
+function ns.CountsInShare(r, forConc)
+	if not r or r.gathered then return false end
+	if forConc then
+		if r.concNotAuctionable or r.concProjected then return false end
+		return (r.concSpd or 0) > 0
+	end
+	if r.notAuctionable or r.spdProjected then return false end
+	return (r.spd or 0) > 0
+end
+
+-- ===== procedência =====
+-- "De onde veio este número e quanto dá para confiar nele?" era respondida em pedaços espalhados
+-- (saleFromContainer, saleOpens, spdProjected, SpdIsEstimate, audit.prices). Aqui fica uma só.
+-- Devolve { fonte, nivel, nota } com nivel em "firme" | "estimado" | "projetado" | "fraco".
+local NIVEL_COR = {
+	firme = "|cff55ff55", estimado = "|cffffd100", projetado = "|cffff9e40", fraco = "|cffff5555",
+}
+ns.NIVEL_COR = NIVEL_COR
+
+function ns.Provenance(r, campo)
+	if not r then return nil end
+	local P = ns.Pricing
+	if campo == "sale" or campo == "concSale" then
+		local projetado = (campo == "sale") and r.saleFromContainer or r.concProjected
+		if projetado then
+			local n = (campo == "sale") and (r.saleOpens or 0) or 0
+			local fraco = (campo == "sale") and n < (ns.MIN_OPENS or 10)
+			return {
+				fonte = L["conteúdo do baú"],
+				nivel = fraco and "fraco" or "projetado",
+				nota = (campo == "sale") and string.format(L["média de %d aberturas"], n) or nil,
+			}
+		end
+		if not r.sale and not r.concSale then return nil end
+		return { fonte = P.SourceName and P.SourceName() or "?", nivel = "firme" }
+	end
+	if campo == "spd" or campo == "concSpd" then
+		local projetado = (campo == "spd") and r.spdProjected or r.concProjected
+		if projetado then
+			return { fonte = L["conteúdo do baú"], nivel = "projetado",
+				nota = L["é a velocidade do conteúdo, não deste item"] }
+		end
+		local estimado = P.SpdIsEstimate and P.SpdIsEstimate()
+		return { fonte = estimado and L["estimativa do scan próprio"] or L["vendas da região (TSM)"],
+			nivel = estimado and "estimado" or "firme" }
+	end
+	if campo == "cost" then
+		if r.missing then return { fonte = L["reagente sem preço"], nivel = "fraco" } end
+		if r.usesCrafted then return { fonte = L["custo de fabricar o reagente"], nivel = "estimado" } end
+		return { fonte = P.SourceName and P.SourceName() or "?", nivel = "firme" }
+	end
+	return nil
+end
+
+-- Lucro de vender `qty` unidades a `unit`, descontando a taxa da casa de leilões e o custo.
+-- `unit` tem de ser o preço JÁ projetado (r.saleProj / r.concSaleProj): a função não escolhe por
+-- quem chama, só garante que a fórmula é a mesma em todo lugar.
+function ns.NetProfit(unit, qty, cost, cut)
+	if not unit then return nil end
+	cut = cut or Cfg("ahCut") or 0
+	return unit * (qty or 1) * (1 - cut) - (cost or 0)
+end
 
 function ns.Recommendable(r, forConc)
 	-- classe do resultado pedido: com concentração = curva do ouro/ponto; sem = curva da margem
@@ -696,14 +764,14 @@ local function ComputeProfit(r)
 	r.unitCost = r.expQty > 0 and r.expCost / r.expQty or nil
 	r.profit, r.margin, r.profitBase = nil, nil, nil
 	if r.sale then
-		r.profitBase = r.saleProj * r.qty * (1 - ahCut) - r.cost
-		r.profit = r.saleProj * r.expQty * (1 - ahCut) - r.expCost
+		r.profitBase = ns.NetProfit(r.saleProj, r.qty, r.cost, ahCut)
+		r.profit = ns.NetProfit(r.saleProj, r.expQty, r.expCost, ahCut)
 		if r.expCost > 0 then r.margin = r.profit / r.expCost end
 	end
 	r.concProfit, r.perConc, r.concEff, r.concBeaten = nil, nil, nil, nil
 	if r.concCost and r.concSale then
 		r.concEff = EffectiveConc(r.concCost, st, r.ingRefund)
-		r.concProfit = r.concSaleProj * r.expQty * (1 - ahCut) - r.expCost
+		r.concProfit = ns.NetProfit(r.concSaleProj, r.expQty, r.expCost, ahCut)
 		r.perConc = r.concProfit / r.concEff
 	end
 	-- qualidade de cima com reagentes melhores (sem concentração)
@@ -711,7 +779,7 @@ local function ComputeProfit(r)
 	if r.mix and r.mixSale then
 		r.mixCost = r.cost + (r.mix.extra or 0)
 		r.mixExpCost = ExpectedCost(r.mixCost, st)
-		r.mixProfit = r.mixSaleProj * r.expQty * (1 - ahCut) - r.mixExpCost
+		r.mixProfit = ns.NetProfit(r.mixSaleProj, r.expQty, r.mixExpCost, ahCut)
 		-- se os reagentes dão o mesmo resultado com mais lucro, não vale gastar concentração aqui
 		if r.perConc and r.mixProfit >= (r.concProfit or -math.huge) then
 			r.concBeaten = true

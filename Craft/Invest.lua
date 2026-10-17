@@ -470,8 +470,8 @@ local function WeeklyValue(entry, d)
 			-- usava r.sale/r.concSale e o Investimento ficava mais otimista que as Receitas e o Plano
 			local v1 = r.saleProj or r.sale
 			local v2 = r.concSaleProj or r.concSale
-			local p1 = v1 * q * (1 - cut) - cost
-			local p2 = v2 * q * (1 - cut) - cost
+			local p1 = ns.NetProfit(v1, q, cost, cut)
+			local p2 = ns.NetProfit(v2, q, cost, cut)
 			-- só conta o que a concentração fabrica: lucro do craft feito com concentração
 			local gain = p2
 			-- d.skillBy (opcional): perícia extra por receita (nós da especialização que afetam cada uma)
@@ -1123,8 +1123,8 @@ function Invest.Evaluate(entry, prof)
 		if r.skill and r.difficulty and r.difficulty > r.skill and r.concSale and r.sale and not r.excluded and not r.mix then
 			local q = r.expQty or r.qty
 			local cost = r.expCost or r.cost
-			local p1 = (r.saleProj or r.sale) * q * (1 - cut) - cost
-			local p2 = (r.concSaleProj or r.concSale) * q * (1 - cut) - cost
+			local p1 = ns.NetProfit(r.saleProj or r.sale, q, cost, cut)
+			local p2 = ns.NetProfit(r.concSaleProj or r.concSale, q, cost, cut)
 			if p2 > math.max(p1, 0) then
 				local need = r.difficulty - r.skill
 				local needTop = r.skillTop and math.max(r.difficulty - r.skillTop, 0) or need

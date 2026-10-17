@@ -414,6 +414,24 @@ function UI.AuditView.Render(cv)
 		y = y + 4
 	end
 
+	-- ----- procedência: de onde veio cada número e quanto vale -----
+	y = Faixa(cv, y, W, L["Procedência dos números"], nil)
+	local CAMPOS = {
+		{ "sale", L["Venda"] }, { "concSale", L["Venda"] .. " " .. ns.QIcon(2) },
+		{ "spd", L["Vendas por dia (região)"] }, { "cost", L["Materiais"] },
+	}
+	for i, c in ipairs(CAMPOS) do
+		local pv = ns.Provenance and ns.Provenance(r, c[1])
+		if pv then
+			root.Zebra(cv, i, 0, y - 1, W, 16)
+			cv:Text(10, y, c[2], GameFontHighlightSmall, 180)
+			cv:Text(196, y, (ns.NIVEL_COR[pv.nivel] or "") .. pv.fonte .. "|r", GameFontHighlightSmall, 240)
+			if pv.nota then cv:Text(444, y, "|cff9d9d9d" .. pv.nota .. "|r", GameFontDisableSmall, W - 460) end
+			y = y + 16
+		end
+	end
+	y = y + 4
+
 	-- ----- operação e decisão -----
 	y = Faixa(cv, y, W, L["Operação e decisão"], r.audit and r.audit.opMode or nil)
 	local st = r.stats
@@ -499,7 +517,9 @@ local function Variants(r)
 	local function npc(itemID, quality, sale, spd)
 		local vb = itemID and P.VendorBuy(itemID)
 		if not vb or not sale then return end
-		local profit = sale * (1 - cut) - vb
+		-- mesma fórmula de todo mundo (ns.NetProfit): revenda é comprar agora e vender ao longo de
+		-- dias, então usa o preço projetado igual ao resto
+		local profit = ns.NetProfit(sale, 1, vb, cut)
 		if profit <= 0 then return end   -- revenda só aparece quando dá lucro
 		table.insert(out, setmetatable({
 			_r = r, variant = "npc", itemID = itemID, quality = quality,
@@ -513,8 +533,8 @@ local function Variants(r)
 			abc = "A", abcShare = false, abcFree = true, notAuctionable = false,
 		}, VIEW_MT))
 	end
-	npc(r.itemID, r.quality, r.sale, r.spd)
-	if r.concItemID and r.concItemID ~= r.itemID then npc(r.concItemID, r.concQuality, r.concSale, r.concSpd) end
+	npc(r.itemID, r.quality, r.saleProj or r.sale, r.spd)
+	if r.concItemID and r.concItemID ~= r.itemID then npc(r.concItemID, r.concQuality, r.concSaleProj or r.concSale, r.concSpd) end
 	return out
 end
 
@@ -586,18 +606,17 @@ local function BuildView()
 		--   coleta       · não é venda de craft;
 		--   sem AH       · item vinculado não tem para quem ser vendido;
 		--   projetado    · o número é a velocidade do CONTEÚDO do baú, não deste item.
-		local function ForaDaConta(v)
-			return v.gathered or v.notAuctionable or v.spdProjected
-		end
+		-- MESMA regra do ApplyABC (ns.CountsInShare): a linha da tela repassa os campos da receita.
+		-- Quando as duas eram escritas à parte, a coluna mostrava 41% de um item que o filtro já
+		-- tinha excluído — e foi preciso um print do Rafael para descobrir.
+		local function Conta(v) return type(v.spd) == "number" and ns.CountsInShare(v, false) end
 		local total, seen = 0, {}
 		for _, v in ipairs(view) do
 			local id = v.itemID or v.recipeID
-			if type(v.spd) == "number" and not seen[id] and not ForaDaConta(v) then
-				seen[id] = true; total = total + v.spd
-			end
+			if Conta(v) and not seen[id] then seen[id] = true; total = total + v.spd end
 		end
 		for _, v in ipairs(view) do
-			v.spdPct = (total > 0 and type(v.spd) == "number" and not ForaDaConta(v)) and (v.spd / total) or false
+			v.spdPct = (total > 0 and Conta(v)) and (v.spd / total) or false
 			-- quantos crafts o estoque atual cobre (ao vivo)
 			if v.variant ~= "npc" and ns.Stock then
 				rawset(v, "craftable", ns.Stock.CraftsFor(v.parts) or false)
@@ -911,9 +930,13 @@ local function ShowTooltip(row)
 		local mc = r.stats and r.stats.mc or 0
 		-- mesmo preço da conta do lucro (com a tendência descontada, se ligada): com r.sale cru,
 		-- este bloco contradizia a coluna Lucro da própria linha
-		local net = (r.saleProj or r.sale) * (1 - cut)
+		local unit = r.saleProj or r.sale
+		local net = unit * (1 - cut)   -- só para o "empata com", que é por unidade
 		local procQty = (mc > 0 and r.expQty and r.expQty > r.qty) and (r.qty + (r.expQty - r.qty) / mc) or nil
-		local function Pf(q) local v = net * q - r.expCost; return (v >= 0 and "|cff55ff55" or "|cffff5555") .. P.FormatMoney(math.abs(v)) .. (v < 0 and " (-)" or "") .. "|r" end
+		local function Pf(q)
+			local v = ns.NetProfit(unit, q, r.expCost, cut)
+			return (v >= 0 and "|cff55ff55" or "|cffff5555") .. P.FormatMoney(math.abs(v)) .. (v < 0 and " (-)" or "") .. "|r"
+		end
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine(string.format(L["Transmutação · chance de multicraft %s"], root.Num(mc * 100, 1) .. "%"), 1, 0.82, 0)
 		GameTooltip:AddDoubleLine(string.format(L["Sem proc (%s)"], root.Num(r.qty, 0)), Pf(r.qty), 1, 1, 1)
@@ -990,7 +1013,7 @@ local function ShowTooltip(row)
 	-- a Venda tem de sair do MESMO preço do Lucro, senão as duas linhas se contradizem aqui mesmo
 	local vUnit = r.saleProj or r.sale
 	GameTooltip:AddDoubleLine(string.format(L["Venda (%.2f un esperadas, -%d%% AH)"], q, cut * 100),
-		vUnit and P.FormatMoney(vUnit * q * (1 - cut)) or "—", 1, 0.82, 0, 1, 1, 1)
+		vUnit and P.FormatMoney(ns.NetProfit(vUnit, q, 0, cut)) or "—", 1, 0.82, 0, 1, 1, 1)
 	if r.sale and vUnit and math.abs(r.sale - vUnit) >= 1 then
 		GameTooltip:AddDoubleLine(L["   preço de hoje (sem o desconto da tendência)"],
 			P.FormatMoney(r.sale * q * (1 - cut)), 0.6, 0.6, 0.6, 0.7, 0.7, 0.7)   -- preco de hoje de proposito

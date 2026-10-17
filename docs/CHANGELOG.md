@@ -1307,3 +1307,39 @@ Removidas as 6 funções expostas que ninguém chamava — nem o addon, nem os t
 - **Fixture nova** (ideia 5): regenerar invalida todas as linhas de base ao mesmo tempo, e aí o diff
   desta rodada não distinguiria mudança de código de mudança de dado. Fica para a rodada seguinte,
   sozinha.
+
+## v1.38.1 — fonte única (ideia 1) e procedência num lugar só (ideia 2)
+As duas que eu tinha deixado de fora na v1.38.0 por serem grandes demais às vésperas de publicar.
+
+### Fonte única para número derivado
+Duas regras estavam escritas em mais de um lugar, e divergir foi a **fábrica dos três últimos
+números errados**:
+- *"esta linha conta na participação de vendas?"* — `ApplyABC` e `BuildView` tinham cópias
+  separadas. Foi o que deixou o Bouquet com 41% na coluna depois de já ter sido excluído do filtro.
+- *"lucro = venda × qtd − taxa − custo"* — estava escrita no `Scanner`, duas vezes no `Invest`, em
+  dois tooltips e na revenda de NPC. Quando a v1.37.0 mudou o preço de entrada, três cópias ficaram
+  para trás.
+
+Agora são `ns.CountsInShare(r, forConc)` e `ns.NetProfit(unit, qty, cost, cut)`, e **todo mundo
+chama**. A revenda de NPC, que eu não tinha notado antes, também passou a usar o preço projetado.
+
+### Procedência
+"De onde veio este número e quanto dá para confiar nele" estava espalhada em `saleFromContainer`,
+`saleOpens`, `spdProjected`, `SpdIsEstimate` e `audit.prices`. Virou `ns.Provenance(r, campo)`, que
+devolve fonte, nível (`firme` / `estimado` / `projetado` / `fraco`) e uma nota.
+- A aba de Auditoria ganhou o bloco **"Procedência dos números"**: venda, venda ★2, vendas/dia e
+  materiais, cada um com a fonte colorida pelo nível.
+- Assim fica visível que uma venda de 720.542 saiu da **média de 3 aberturas** de um baú, em vez de
+  parecer um preço firme.
+
+### Testes
+- t122.lua: `CountsInShare` em 8 casos (as duas curvas, coleta, sem AH, projetado, linha nil),
+  `NetProfit` incluindo preço ausente e taxa vinda da config, o Scanner usando a própria função, e
+  uma **varredura de fonte** que falha se alguém reescrever `* (1 - cut)` fora dela (com exceções
+  marcadas no código: o preço de hoje do tooltip e o "empata com", que é por unidade).
+- t123.lua: procedência de venda/vendas-dia/custo em todos os níveis e o bloco novo na Auditoria,
+  sem nada fora do canvas.
+- `t115` muda de propósito: a aba de Auditoria passou de 66 para 75 textos (o bloco novo).
+
+### Comportamento
+A refatoração é **neutra**: fora dos testes novos e do `t115`, a suíte não teve nenhuma diferença.
