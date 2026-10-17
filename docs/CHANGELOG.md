@@ -1409,3 +1409,37 @@ você consegue — você entraria abaixo dele.
 - **A suíte não mudou em nada**, porque o harness não tem TSM e esse caminho não é exercitado. O
   t125 testa a regra isolada, mas o efeito real só dá para ver no jogo. É uma lacuna de cobertura
   conhecida.
+
+## v1.39.0 — aba Simular: todas as combinações de qualidade dos reagentes (pedido do Rafael)
+"quero saber qual é a melhor opção entre craftar a light potion com os materiais mais vagabundos
+contra craftar com os melhores, e todas as combinações de qualidade dos materiais, e quanto isso
+afeta a concentração e quantas vezes eu conseguiria craftar mais vezes se mudar o material."
+
+- **Por que não dá para decidir de cabeça**: a combinação mexe em três coisas ao mesmo tempo —
+  o custo dos reagentes, a perícia (e com ela a qualidade que sai **sem** gastar concentração) e o
+  custo de concentração para subir uma qualidade. Como a concentração é o recurso escasso, reagente
+  barato que exige mais concentração rende **menos crafts** e pode dar menos ouro no total.
+- **`Craft/Simulate.lua`**: enumera o produto cartesiano das qualidades de cada slot e pergunta a
+  cada combinação para a **API do jogo** (`Scanner.TryOp`, a mesma que o painel de profissão usa) —
+  não é fórmula própria, é o único jeito de bater com o que o jogo vai fazer.
+- **Colunas**: Reagentes · Custo · Perícia · Qualidade · Concentração · Lucro · Lucro/ponto ·
+  **Crafts** · **Total**. Todas ordenáveis; a melhor pelo total ganha fundo verde, e uma linha no
+  topo diz quanto o melhor conjunto rende a mais que o mais barato e com quantos crafts a mais.
+- **"Crafts"** é a resposta direta ao pedido: `floor((concentração - custo cheio) / custo efetivo) + 1`.
+  No teste, subir um slot de qualidade custa 8g a mais em reagente e dá **1 craft a mais e 170,50g
+  a mais no total**.
+- **Combinação que não usa concentração** não é limitada por ela: aparece como **"livre"** em vez de
+  competir no mesmo eixo. Dizer "0 crafts" porque o estoque está vazio seria mentir — o limite ali é
+  material e ouro, que se compram.
+- **Acompanha a receita selecionada**, igual à Auditoria: as duas leem `ns.auditOut.row`, então não
+  há um segundo mecanismo de seleção para aprender. Clique na lista ou selecione na janela da
+  profissão.
+- Teto de **243 combinações** (3^5): cada uma é uma chamada à API, e isto é uma tela sob demanda.
+- Teste: t126.lua (as 4 combinações de uma receita de 2 slots, com a API simulada de forma
+  realista — reagente melhor dá mais perícia e menos concentração; a prova de que o mais barato não
+  é o melhor; a linha "livre"; receita sem escolha de qualidade; e a aba desenhando sem nada fora
+  do canvas).
+- `t110` e `t124` mudam de propósito: a aba nova entra nas duas varreduras de geometria, limpa.
+
+### Atenção
+O `.toc` ganhou um arquivo, então **precisa reiniciar o WoW** — `/reload` não basta desta vez.

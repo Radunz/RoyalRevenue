@@ -222,6 +222,7 @@ local function TryOp(recipeID, tbl)
 	if ok and op and op.craftingQuality then return op end
 	return nil
 end
+Scanner.TryOp = TryOp   -- o simulador de reagentes precisa perguntar ao jogo combinação por combinação
 
 -- Menor custo extra para subir 1 qualidade só trocando reagentes pela qualidade superior.
 -- A skill de cada slot é medida na API (slot inteiro na qualidade superior); as trocas entram da

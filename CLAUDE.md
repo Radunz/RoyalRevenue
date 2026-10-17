@@ -51,7 +51,7 @@ local ns = root.Craft   -- ou root.Livro
 ```
 Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. O que é comum fica em `root` (Brand.lua).
 
-### Craft (abas: Craft = Receitas, Plano, Investimento, Destruir, Fila · Mercado = Comprar, Vender, Comprar receitas)
+### Craft (abas: Craft = Receitas, Plano, Investimento, Destruir, Fila, Auditoria, Simular · Mercado = Comprar, Vender, Comprar receitas)
 - **Pricing.lua**
   - Fontes de preço: TSM > Auctionator > scan próprio (`Pricing.Mode`).
   - Funções: `Sale`, `Cost`, `SoldPerDay`, `Trend`, `Reference`, `FlipReference`.
@@ -62,6 +62,11 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
   - `BuildCraftMap`: o que vale mais fabricar do que comprar.
   - Rendimento real de multicraft por personagem e perfil (`yieldBy`).
 - **Plan.lua**: plano de concentração. Guloso por ouro/ponto, com "SEGURE" para a melhor receita.
+- **Simulate.lua**: aba Simular. Enumera TODAS as combinações de qualidade dos reagentes e pergunta
+  à API do jogo (`Scanner.TryOp`) a perícia, a qualidade de saída e o custo de concentração de cada
+  uma. Responde "o barato compensa?": reagente ruim costuma exigir mais concentração, e aí rende
+  MENOS crafts no total. Acompanha a receita selecionada, igual à Auditoria (as duas leem
+  `ns.auditOut.row`). Teto de 243 combinações (3^5), porque cada uma é uma chamada à API.
 - **Buy.lua**: Mercado > Comprar.
   - Barra de listas (Plano / Fila / Consumíveis).
   - `Buy.Analyze`: preço típico pela mediana; índice do dia da semana e da faixa de horário; anúncio fora do normal.
@@ -132,7 +137,7 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
   **de propósito** — a linha de base deles só vale se o dado não muda. Teste novo que precise de
   dado realista usa o 13. Foi ele que mostrou que dominância de participação nem sempre é defeito:
   o tecido é 68% da Alfaiataria porque vende 6.093/dia de verdade.
-- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t125.lua**).
+- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t127.lua**).
 - **Os testes são de regressão por diff, não de passa/falha.** Fluxo para qualquer mudança:
   ```bash
   cp -r RoyalRevenue baseline/RoyalRevenue          # antes de mexer (ou extrair o zip da versão anterior)

@@ -11,7 +11,7 @@ ns.UI = UI
 -- a aba Histórico (vendas) foi para o addon LucroLivro (/livro vendas)
 -- (a aba Apostas saiu na v1.0.15: TAB.BETS = nil)
 -- Dois grupos de abas na mesma janela (menu de cima): Craft (1-6) e Mercado (7-8). IDs na ordem visual de cada grupo.
-local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9, AUDIT = 10 }
+local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9, AUDIT = 10, SIM = 11 }
 local MARKET = { [7] = true, [8] = true, [9] = true }
 -- Configurações (6) não tem aba: abre pela engrenagem e mantém o grupo atual
 function UI.ModeOf(id)
@@ -238,10 +238,11 @@ function UI.AuditWatch(ligar)
 	if auditTicker then auditTicker:Cancel(); auditTicker = nil end
 	if not ligar then return end
 	auditTicker = C_Timer.NewTicker(0.5, function()
-		if not (frame and frame:IsShown() and frame.currentTab == TAB.AUDIT) then return end
+		local aba = frame and frame:IsShown() and frame.currentTab
+		if aba ~= TAB.AUDIT and aba ~= TAB.SIM then return end
 		if not UI.AuditFollowing() then return end
 		local id = UI.SelectedRecipeID()
-		if id and UI.AuditFollow(id) then UI.RefreshTab(TAB.AUDIT) end
+		if id and UI.AuditFollow(id) then UI.RefreshTab(aba) end
 	end)
 end
 
@@ -1179,8 +1180,9 @@ local function OnRowClick(row, button)
 	if C_TradeSkillUI.OpenRecipe then C_TradeSkillUI.OpenRecipe(r.recipeID) end
 	-- clique simples ja seleciona a receita no jogo; a auditoria acompanha na hora, sem esperar o
 	-- laco de 0,5 s e sem trocar de aba (quem quer a aba usa Alt+clique)
-	if r.recipeID and UI.AuditFollow(r.recipeID) and frame and frame.currentTab == TAB.AUDIT then
-		UI.RefreshTab(TAB.AUDIT)
+	if r.recipeID and UI.AuditFollow(r.recipeID) and frame
+		and (frame.currentTab == TAB.AUDIT or frame.currentTab == TAB.SIM) then
+		UI.RefreshTab(frame.currentTab)
 	end
 end
 
@@ -1532,7 +1534,7 @@ local function Create()
 	-- abas visuais (Plano de concentração e Investimento)
 	frame.canvases = { [TAB.PLAN] = ns.Visual.Create(frame), [TAB.INVEST] = ns.Visual.Create(frame), [TAB.QUEUE] = ns.Visual.Create(frame),
 		[TAB.SALVAGE] = ns.Visual.Create(frame), [TAB.BUY] = ns.Visual.Create(frame), [TAB.SELL] = ns.Visual.Create(frame), [TAB.RECIPES] = ns.Visual.Create(frame),
-		[TAB.AUDIT] = ns.Visual.Create(frame) }
+		[TAB.AUDIT] = ns.Visual.Create(frame), [TAB.SIM] = ns.Visual.Create(frame) }
 	-- a aba Fila tem a barra de botões em cima
 	-- (a barra de botões da Fila agora fica dentro da aba, em cada parte)
 
@@ -1583,8 +1585,8 @@ local function Create()
 
 	-- abas no rodapé, no estilo da janela de profissão. IDs fixos (1..6); a ordem visual é outra.
 	local TAB_LABELS = { L["Receitas"], L["Plano de concentração"], L["Investimento"], L["Destruir"], L["Fila de craft"],
-		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"], L["Auditoria"] }
-	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }
+		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"], L["Auditoria"], L["Simular"] }
+	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }
 	frame.Tabs = {}
 	local strip = ns.root.MakeTabStrip(frame)
 	for _, i in ipairs(TAB_ORDER) do
@@ -1635,6 +1637,7 @@ local function RenderVisual(id, resetScroll)
 	local mod = (id == TAB.PLAN and ns.Plan) or (id == TAB.INVEST and ns.Invest) or (id == TAB.QUEUE and ns.Queue)
 		or (id == TAB.SALVAGE and ns.Salvage) or (id == TAB.BUY and ns.Buy) or (id == TAB.SELL and ns.Sell) or (id == TAB.RECIPES and ns.RecipeShop)
 		or (id == TAB.AUDIT and UI.AuditView)
+		or (id == TAB.SIM and ns.Simulate)
 	if id == TAB.QUEUE and frame.queueBar then
 		frame.queueBar.craft:SetText(ns.Queue.NextLabel())
 		frame.queueBar.cbPlan:SetChecked(Cfg("queueIncludePlan") and true or false)
@@ -1676,7 +1679,7 @@ function UI.ShowTab(id)
 	id = id or 1
 	frame.currentTab = id
 	-- o laco que acompanha a selecao so existe enquanto a aba de Auditoria esta aberta
-	if UI.AuditWatch then UI.AuditWatch(id == TAB.AUDIT) end
+	if UI.AuditWatch then UI.AuditWatch(id == TAB.AUDIT or id == TAB.SIM) end
 	ns.root.SelectTab(frame.Tabs, id)
 	local mode = UI.ModeOf(id)
 	frame.lastTab = frame.lastTab or {}
@@ -1747,7 +1750,7 @@ end
 
 -- ===== Tamanho da janela =====
 local DEFAULT_HEIGHT = 128 + TOTAL_ROWS * ROW_H
-local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.AUDIT] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
+local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.AUDIT] = VISUAL_WIDTH, [TAB.SIM] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
 
 -- largura mínima de cada aba (o que precisa para não cortar nada)
 local function TabMinWidth(id)
