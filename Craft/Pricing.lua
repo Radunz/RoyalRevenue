@@ -215,7 +215,13 @@ function Pricing.Sale(itemID)
 	local own = OwnMin(itemID)
 	if own then return own end
 	-- baú/caixa sem preço próprio: valor médio do que sai ao abrir
-	if ns.Containers then return (ns.Containers.Value(itemID)) end
+	-- baú: além do valor, diz que é PROJEÇÃO e de quantas aberturas saiu. Sem isso um valor tirado
+	-- de 3 aberturas tinha a mesma cara de um preço do TSM com milhares de anúncios.
+	if ns.Containers then
+		local v, _, opens = ns.Containers.Value(itemID)
+		if v then return v, true, opens end
+		return nil
+	end
 	return nil
 end
 
@@ -327,14 +333,6 @@ function Pricing.FlipReference(itemID)
 		return best
 	end
 	return Pricing.Reference(itemID)
-end
-
--- quantos anúncios do item no reino (TSM NumAuctions); nil se não souber
-function Pricing.NumAuctions(itemID)
-	if not itemID or not Pricing.HasTSM() then return nil end
-	local v = TSMValue("NumAuctions", itemID)
-	if v and v >= 0 then return v end
-	return nil
 end
 
 -- chance de um anúncio vender na região (TSM DBRegionSaleRate, 0..1); nil sem TSM

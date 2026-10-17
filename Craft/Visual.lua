@@ -615,10 +615,3 @@ function V.ItemName(itemID)
 	return "item " .. tostring(itemID)
 end
 
-function V.TrendShade(t)
-	local flag = ns.Pricing.TrendFlag(t)
-	if flag == "down" then return { 1, 0.1, 0.1, 0.28 } end
-	if flag == "spike" then return { 1, 0.82, 0, 0.22 } end
-	return nil
-end
-

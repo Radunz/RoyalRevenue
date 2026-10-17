@@ -1262,3 +1262,48 @@ Achado ao procurar se o caso do `spdShare` × `spdPct` (v1.37.5) era isolado: n�
 - Varredura de função exposta que ninguém chama: 6 (`Pricing.NumAuctions`,
   `Scanner.InvalidateCraftMap`, `V.TrendShade`, `Livro/UI.ClearCache`, `root.ClearPriceCache`,
   `root.TopTabTemplate`). Nenhuma é do caminho de cálculo; ficam para uma limpeza futura.
+
+## v1.38.0 — aviso de número velho, confiança da projeção de baú e limpeza
+Rodada pedida: "aplique todas, revise, otimize o que conseguir, elimine código morto".
+
+### Aviso de número velho (ideia 3)
+Os números de uma receita só mudam quando a profissão é reaberta — `ComputeProfit` e `ApplyABC`
+rodam no scan, não no `/reload`. Em **quatro** correções seguidas foi preciso explicar isso à mão.
+- `root.Version()` lê a versão do `.toc`; `root.VerCmp` compara como versão e não como texto
+  (`1.9.0 < 1.10.0`, que comparação de string erra).
+- A entrada do scan passa a guardar `ver`. A barra da profissão mostra
+  **"! números da v1.30.0 - reabra a profissão"** quando o dado é de outra versão.
+
+### Confiança da projeção de baú (ideia 4, transmutes)
+Transmutação que gera baú não tem preço de AH: o valor sai de `Containers.Value`, que é a **média do
+que saiu em N aberturas**. Com 3 aberturas isso é um chute, e aparecia com a mesma cara de um preço
+do TSM tirado de milhares de anúncios.
+- `Pricing.Sale` passa a devolver também "é projeção" e "quantas aberturas".
+- A linha guarda `saleFromContainer` e `saleOpens`; o tooltip diz
+  **"Venda projetada pelo conteúdo do baú (N aberturas)"** e avisa quando a amostra é pequena,
+  com quantas faltam (`ns.MIN_OPENS = 10`).
+- Isso fecha com as cargas (v1.37.3): o que decide "vale a pena pôr no plano" é lucro por carga, e
+  agora dá para ver se o lucro em si é confiável. O `t36` mostra o efeito em dado real: a caixa que
+  ele testa tem **2 aberturas**.
+
+### Código morto (ideia 6)
+Removidas as 6 funções expostas que ninguém chamava — nem o addon, nem os testes:
+`Pricing.NumAuctions`, `Scanner.InvalidateCraftMap`, `V.TrendShade`, `Livro/UI.ClearCache`,
+`root.ClearPriceCache`, `root.TopTabTemplate`. A varredura agora acusa **zero**.
+
+### Testes
+- t120.lua: `VerCmp` em 7 casos (incluindo `1.9.0 < 1.10.0` e versão ausente), o aviso aparecendo só
+  quando o dado é de outra versão, e a conferência de que nenhuma função morta ficou.
+- t121.lua: os dois retornos novos do `Sale`, a procedência gravada na linha, o limiar de amostra e
+  as cargas.
+- `t36` muda de propósito: imprime os retornos do `Sale` e agora sai `105000 true 2`.
+
+### Ficaram de fora desta rodada (e por quê)
+- **Fonte única para número derivado** (ideia 1): o `t119` já trava a parte perigosa (preço), mas
+  unificar `BuildView`/`Invest`/tooltips numa função só é refatoração grande — não às vésperas de
+  publicar.
+- **Procedência completa** (ideia 2): a parte que pegava bug já entrou (`spdProjected`,
+  `saleFromContainer`). Um sistema geral de procedência para todo valor é trabalho à parte.
+- **Fixture nova** (ideia 5): regenerar invalida todas as linhas de base ao mesmo tempo, e aí o diff
+  desta rodada não distinguiria mudança de código de mudança de dado. Fica para a rodada seguinte,
+  sozinha.

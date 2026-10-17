@@ -153,7 +153,6 @@ local function Load(shift)
 	loadCache[key] = { rev = Ledger.rev, t = now, data = data, m = m, d = d }
 	return data, m, d
 end
-function UI.ClearCache() wipe(loadCache) end
 
 local function Prev()
 	if not Period() or Period() == "session" then return nil end

@@ -528,6 +528,9 @@ Scanner.ApplyABC = ApplyABC
 -- Só itens com giro: classe ABC dentro do mínimo configurado (padrão A e B) e, se for usar
 -- concentração, a qualidade superior também precisa vender pelo menos minSoldPerDay por dia.
 local ABC_RANK = { A = 1, B = 2, C = 3 }
+-- aberturas de baú abaixo disso = projeção fraca (média de 3 aberturas não é preço)
+ns.MIN_OPENS = 10
+
 function ns.Recommendable(r, forConc)
 	-- classe do resultado pedido: com concentração = curva do ouro/ponto; sem = curva da margem
 	local abc = forConc and r.concAbc or r.abc
@@ -844,14 +847,21 @@ function Scanner.CraftMapAll()
 	if not allMap then allMap = BuildCraftMap() end
 	return allMap
 end
-function Scanner.InvalidateCraftMap() allMap = nil end
 Scanner.ApplyCraftedReagents = ApplyCraftedReagents
 
 -- Preços de venda, vendas/dia e tendência de uma linha (no scan e ao reprecificar sem a profissão aberta)
 local function PriceRow(r)
 	local s, spd
 	if r.saleLink then s, spd = P.SaleByLink(r.saleLink) end
-	r.sale = s or P.Sale(r.itemID)
+	local saleProj, saleOpens
+	if s then
+		r.sale = s
+	else
+		r.sale, saleProj, saleOpens = P.Sale(r.itemID)
+	end
+	-- venda projetada pelo conteúdo do baú, e o tamanho da amostra por trás dela
+	r.saleFromContainer = saleProj or nil
+	r.saleOpens = saleProj and saleOpens or nil
 	local spdProj
 	if spd then
 		r.spd = spd
@@ -1343,6 +1353,7 @@ function Scanner.Scan(silent)
 		skillLine = prof.professionName,
 		expansion = prof.expansionName,
 		time = time(),
+		ver = root.Version and root.Version() or nil,   -- versão que calculou estes números
 		source = P.SourceName(),
 		skipped = skipped,
 		conc = conc,

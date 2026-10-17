@@ -793,8 +793,14 @@ function UI.Refresh()
 		end
 		local age = ns.Alerts and ns.Alerts.AgeText(entry.time) or when
 		local priced = ns.Alerts and ns.Alerts.AgeText(entry.pricedAt or entry.time) or ""
+		-- dado de versão anterior: os números só mudam ao reabrir a profissão (o ComputeProfit e o
+		-- ApplyABC rodam no scan), então sem este aviso o usuário vê número velho sem saber
+		local velho = ""
+		if root.Version and root.VerCmp and entry.ver ~= root.Version() then
+			velho = string.format(L["  |cffff8800! números da v%s - reabra a profissão|r"], entry.ver or "?")
+		end
 		frame.profLabel:SetText(string.format(L["|cffffd100%s|r  %s%s  |cff9d9d9d(scan há %s|cff9d9d9d · preços há %s|cff9d9d9d · %s)|r"],
-			entry.name or "?", entry.expansion or entry.skillLine or "", concTxt, age, priced, entry.source or "?"))
+			entry.name or "?", entry.expansion or entry.skillLine or "", concTxt, age, priced, entry.source or "?") .. velho)
 	else
 		frame.profLabel:SetText(L["|cff9d9d9dNenhum dado. Abra sua profissão para escanear.|r"])
 	end
@@ -969,6 +975,17 @@ local function ShowTooltip(row)
 			or src == "anterior" and L["antes da última mudança de pontos/equipamento"] or L["fórmula de referência"]
 		GameTooltip:AddDoubleLine(L["Extra por multicraft"], string.format("+%.1f · %s", ex, srcTxt), 1, 0.82, 0, 0.7, 0.7, 0.7)
 		GameTooltip:AddLine(L["Dados deste personagem com os pontos de conhecimento e o equipamento atuais."], 0.6, 0.6, 0.6, true)
+	end
+	-- venda vinda da projeção do baú: o número vale o tamanho da amostra, então diz qual é
+	if r.saleFromContainer then
+		local n = r.saleOpens or 0
+		local fraca = n < ns.MIN_OPENS
+		GameTooltip:AddLine(string.format(L["Venda projetada pelo conteúdo do baú (%d aberturas)"], n),
+			fraca and 1 or 0.6, fraca and 0.55 or 0.6, fraca and 0.2 or 0.6, true)
+		if fraca then
+			GameTooltip:AddLine(string.format(L["   amostra pequena: abra mais %d para o número firmar"],
+				ns.MIN_OPENS - n), 0.6, 0.6, 0.6, true)
+		end
 	end
 	-- a Venda tem de sair do MESMO preço do Lucro, senão as duas linhas se contradizem aqui mesmo
 	local vUnit = r.saleProj or r.sale

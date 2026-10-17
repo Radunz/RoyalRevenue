@@ -67,10 +67,32 @@ function root.AtrPrice(itemID)
 	end
 	return v or nil
 end
-function root.ClearPriceCache() pc = {} end
 
 -- data "AAAA-MM-DD" (hora local) de um timestamp, com cache por 15 min (date() é caro em laços longos)
 local dayCache, dayCacheN = {}, 0
+-- versão do addon (do .toc). Serve para a tela avisar quando o número guardado foi calculado
+-- por uma versão anterior e ainda não foi refeito.
+function root.Version()
+	if root._ver then return root._ver end
+	local v = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
+		or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "?"
+	root._ver = v
+	return v
+end
+
+-- compara "1.37.6" com "1.37.2": -1, 0 ou 1. Parte não numérica conta como 0.
+function root.VerCmp(a, b)
+	if a == b then return 0 end
+	local pa, pb = {}, {}
+	for n in tostring(a or ""):gmatch("%d+") do pa[#pa + 1] = tonumber(n) end
+	for n in tostring(b or ""):gmatch("%d+") do pb[#pb + 1] = tonumber(n) end
+	for i = 1, math.max(#pa, #pb) do
+		local x, y = pa[i] or 0, pb[i] or 0
+		if x ~= y then return x < y and -1 or 1 end
+	end
+	return 0
+end
+
 function root.DayKey(t)
 	local b = math.floor(t / 900)
 	local d = dayCache[b]
@@ -155,13 +177,6 @@ function root.SetLang(v)
 	RoyalRevenueDB.lang = v
 	LucroCraftDB.config.lang = v
 	LucroLivroDB.config.lang = v
-end
-
--- abas no TOPO da janela (penduradas acima da barra de título): usa o modelo de aba de cima se o jogo tiver
-function root.TopTabTemplate()
-	local ok, info = pcall(function() return C_XMLUtil and C_XMLUtil.GetTemplateInfo and C_XMLUtil.GetTemplateInfo("PanelTopTabButtonTemplate") end)
-	if ok and info then return "PanelTopTabButtonTemplate" end
-	return "PanelTabButtonTemplate"
 end
 
 -- ===== abas planas dentro da janela (faixa logo abaixo da barra de título) =====
