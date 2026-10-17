@@ -829,7 +829,7 @@ local function MatTip(m)
 			tt:AddLine(L["Conta qualquer qualidade do reagente:"], 0.6, 0.6, 0.6)
 			for _, q in ipairs(m.byQ) do
 				local qi = ns.Scanner.ReagentQuality and ns.Scanner.ReagentQuality(q.id)
-				tt:AddDoubleLine("   " .. (qi and ns.QIcon(qi, 2, 12) or "") .. " " .. (C_Item.GetItemNameByID(q.id) or q.id), tostring(q.n), 1, 1, 1, 1, 1, 1)
+				tt:AddDoubleLine("   " .. (qi and ns.QIcon(qi, 2) or "") .. " " .. (C_Item.GetItemNameByID(q.id) or q.id), tostring(q.n), 1, 1, 1, 1, 1, 1)
 			end
 		end
 		if m.usedQ then
@@ -1071,7 +1071,7 @@ function Buy.Render(cv)
 						MenuUtil.CreateContextMenu(btn, function(_, root)
 							root:CreateTitle(L["Qualidade das sugestões"])
 							for i = 1, 2 do
-								root:CreateRadio(ns.QIcon(i, 2, 14) .. " " .. string.format(L["Qualidade %d"], i),
+								root:CreateRadio(ns.QIcon(i, 2) .. " " .. string.format(L["Qualidade %d"], i),
 									function() return ns.Consum.Quality() == i end,
 									function() ns.Consum.SetQuality(i) end)
 							end
@@ -1114,7 +1114,7 @@ function Buy.Render(cv)
 			local q = ns.Scanner and ns.Scanner.ReagentQuality and ns.Scanner.ReagentQuality(m.buyId)
 			lc:Icon(X_ICON, y + 4, 32, ns.Visual.ItemIcon(m.buyId), {
 				count = not have and tostring(m.buy) or nil, desaturate = have, rarity = rarity,
-				quality = q and ns.QIcon(q, 2, 10) or nil,
+				quality = q and ns.QIcon(q, 2) or nil,
 				link = select(2, C_Item.GetItemInfo(m.buyId)), tip = MatTip(m) })
 			local name = ns.Visual.ItemName(m.buyId)
 			lc:Text(X_NAME, y + 6, (have and "|cff9d9d9d" or "|cffffffff") .. name .. "|r", GameFontHighlight, X_PRICE - X_NAME - 8)

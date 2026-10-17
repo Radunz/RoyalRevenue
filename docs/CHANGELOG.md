@@ -1463,3 +1463,29 @@ disponível, não necessitamos poupar espaço."
 - Teste: t126.lua passou a conferir que os ícones aparecem (4 combinações × 2 slots + 1 do cabeçalho
   = 9) e que cada linha sabe o item e a qualidade de cada slot. No código anterior ele acusa
   **1 ícone em vez de 9**.
+
+## v1.39.2 — a marca de qualidade estava achatada e de um tamanho diferente em cada tela
+"consegue aumentar o tamanho do ícone da qualidade, deixar igual ou semelhante ao usado no jogo, o
+feito pelo addon tem proporção do tamanho do ícone da qualidade diferente do jogo padrão, se
+possível mantenha igual para todos os ícones usados no addon."
+
+- **Causa da proporção errada**: `ns.QIcon` montava a marca com
+  `CreateAtlasMarkup(atlas, size, size)` — **quadrada**. A marca do jogo não é: o link que o próprio
+  jogo gera usa **17 de altura por 15 de largura**. Forçar quadrado achatava o ícone.
+- Agora a **altura manda** e a largura sai da proporção real do atlas
+  (`C_Texture.GetAtlasInfo`). Em 16 de altura a marca sai 16x14, como o jogo. Sem a API, continua
+  caindo no texto ("Q2"), sem erro.
+- **Um tamanho padrão** (`ns.QICON_SIZE = 16`, era 14) em vez de 10, 11, 12 e 14 escolhidos a dedo
+  em cada chamada. As 11 marcas em texto espalhadas pelo addon passaram a usar o padrão.
+- **Marca sobre ícone de item**: `ns.QIconOn(q, maxQ, tamanhoDoÍcone)` usa uma **proporção fixa**
+  (`ns.QICON_FRAC = 0.45`), como o jogo faz. Antes o tamanho era solto: 12 sobre um ícone de 34
+  dava 35%, e sobre um de 22 dava 55% — a mesma marca aparecia de um jeito em cada tela. Os 11
+  pontos que desenham marca sobre ícone (Fila, Plano, Investimento, Simular, Receitas) foram
+  convertidos.
+- Teste: t127.lua (a proporção em 4 tamanhos, o tamanho padrão, a proporção fixa em 6 tamanhos de
+  ícone, uma varredura de fonte que falha se alguém voltar a passar tamanho solto, e o caminho sem
+  a API do atlas).
+
+### Nota
+A suíte não muda fora do t127 porque o harness não tem o atlas do jogo e a marca cai no texto — por
+isso o t127 simula a API explicitamente. O efeito visual só aparece no jogo.

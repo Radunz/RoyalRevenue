@@ -69,10 +69,20 @@ local function AtlasOK(name)
 	local ok, info = pcall(C_Texture.GetAtlasInfo, name)
 	return ok and info ~= nil
 end
+-- Tamanho padrão da marca de qualidade em texto. Um só, para a marca não aparecer de um jeito
+-- em cada tela (era 10, 11, 12 e 14 conforme o lugar).
+ns.QICON_SIZE = 16
+-- Marca SOBRE um ícone de item: proporção fixa do ícone, como o jogo faz. Antes cada chamada
+-- escolhia um número solto — 12 sobre um ícone de 34 dá 35%, sobre um de 22 dá 55%.
+ns.QICON_FRAC = 0.45
+function ns.QIconOn(q, maxQ, iconSize)
+	return ns.QIcon(q, maxQ, math.max(10, math.floor((iconSize or 32) * ns.QICON_FRAC + 0.5)))
+end
+
 function ns.QIcon(q, maxQ, size)
 	if not q then return "" end
 	maxQ = maxQ or 2
-	size = size or 14
+	size = size or ns.QICON_SIZE
 	local key = q .. ":" .. maxQ .. ":" .. size
 	if qCache[key] then return qCache[key] end
 	local names = {}
@@ -84,7 +94,18 @@ function ns.QIcon(q, maxQ, size)
 	table.insert(names, "Professions-Icon-Quality-Tier" .. q .. "-Small")
 	local out = "Q" .. q
 	for _, n in ipairs(names) do
-		if AtlasOK(n) then out = CreateAtlasMarkup(n, size, size); break end
+		if AtlasOK(n) then
+			-- A marca do jogo NÃO é quadrada (o link que o próprio jogo gera usa 17 de altura por 15
+			-- de largura). Forçar size x size achatava o ícone e era a "proporção diferente do jogo
+			-- padrão": a altura manda, e a largura sai da proporção real do atlas.
+			local w = size
+			local okA, info = pcall(C_Texture and C_Texture.GetAtlasInfo or function() end, n)
+			if okA and info and (info.width or 0) > 0 and (info.height or 0) > 0 then
+				w = math.max(1, math.floor(size * info.width / info.height + 0.5))
+			end
+			out = CreateAtlasMarkup(n, w, size)
+			break
+		end
 	end
 	qCache[key] = out
 	return out

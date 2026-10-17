@@ -620,7 +620,7 @@ local function DrawRow(cv, y, W, res, m, idx)
 	local rarity = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(m.id) or nil
 	local q = ns.Scanner and ns.Scanner.ReagentQuality and ns.Scanner.ReagentQuality(m.id)
 	cv:Icon(X_ICON, y + 4, 32, ns.Visual.ItemIcon(m.id), {
-		count = tostring(m.count), rarity = rarity, quality = q and ns.QIcon(q, 2, 10) or nil,
+		count = tostring(m.count), rarity = rarity, quality = q and ns.QIcon(q, 2) or nil,
 		link = m.link, tip = ItemTip(m) })
 	cv:Text(X_NAME, y + 6, "|cffffffff" .. name .. "|r", GameFontHighlight, X_PRICE - X_NAME - 8)
 	local sub = string.format(L["tem %s"], root.Num(m.count, 0))

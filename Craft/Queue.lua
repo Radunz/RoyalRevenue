@@ -426,7 +426,7 @@ function Queue.NextLabel()
 	local it = Queue.NextForMe()
 	if not it then return L["Fabricar próximo"] end
 	local q = VariantQuality(it.row, it.variant)
-	local qTag = (q and it.row.maxQuality and it.row.maxQuality > 1) and (" " .. ns.QIcon(q, it.row.maxQuality, 12)) or ""
+	local qTag = (q and it.row.maxQuality and it.row.maxQuality > 1) and (" " .. ns.QIcon(q, it.row.maxQuality)) or ""
 	return L["Fabricar: "] .. (it.row.name or "?") .. qTag
 end
 
@@ -1197,7 +1197,7 @@ function Queue.Render(cv)
 			local id = VariantItem(r, it.variant)
 			local q = VariantQuality(r, it.variant)
 			qc:Icon(8, ly + 2, 32, V.ItemIcon(id, r.icon), {
-				count = tostring(it.n), quality = (q and r.maxQuality and r.maxQuality > 1) and ns.QIcon(q, r.maxQuality, 12) or nil,
+				count = tostring(it.n), quality = (q and r.maxQuality and r.maxQuality > 1) and ns.QIconOn(q, r.maxQuality, 32) or nil,
 				rarity = id and C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id) or nil,
 				link = id and select(2, C_Item.GetItemInfo(id)) or nil,
 				tip = function(tt)
@@ -1348,8 +1348,8 @@ function Queue.Render(cv)
 				end
 				tt:AddDoubleLine(L["Lucro"], P.FormatMoney(math.abs(x.profit)) .. (x.profit < 0 and " (-)" or ""), 1, 0.82, 0, 1, 1, 1)
 				if x.minQ and x.minQ > 1 then
-					tt:AddLine(string.format(L["Qualidade mínima: %s"], ns.QIcon(x.minQ, 5, 14)), 1, 0.82, 0)
-					if x.q0 then tt:AddLine(string.format(L["Sai sem concentração: %s (com os reagentes do cliente + os seus)"], ns.QIcon(x.q0, 5, 14)), 0.7, 0.7, 0.7) end
+					tt:AddLine(string.format(L["Qualidade mínima: %s"], ns.QIcon(x.minQ, 5)), 1, 0.82, 0)
+					if x.q0 then tt:AddLine(string.format(L["Sai sem concentração: %s (com os reagentes do cliente + os seus)"], ns.QIcon(x.q0, 5)), 0.7, 0.7, 0.7) end
 				end
 				if #(x.parts or {}) > 0 then
 					local all = true

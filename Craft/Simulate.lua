@@ -116,7 +116,7 @@ function Sim.Avaliar(r, e, combo, conc)
 		if unit then custo = custo + unit * (p.qty or 1) else semPreco = true end
 		if #opts > 1 then
 			local q = QualIndex(p, id)
-			table.insert(rotulos, ns.QIcon(q, #opts, 11))
+			table.insert(rotulos, ns.QIcon(q, #opts))
 			-- a tela desenha o ícone do item com a marca de qualidade; o rótulo em texto fica para
 			-- a ordenação e para os testes, que não leem textura
 			table.insert(escolhidos, { itemID = id, q = q, maxQ = #opts, qty = p.qty or 1, unit = unit })
@@ -348,7 +348,7 @@ function Sim.Render(cv)
 		local rx = c.reag
 		for _, g in ipairs(x.reagentes or {}) do
 			cv:Icon(rx, y + 2, ICON, V.ItemIcon(g.itemID), {
-				quality = ns.QIcon(g.q, g.maxQ, 11),
+				quality = ns.QIconOn(g.q, g.maxQ, ICON),
 				count = tostring(g.qty),
 				rarity = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(g.itemID) or nil,
 				link = select(2, C_Item.GetItemInfo(g.itemID)),
@@ -363,7 +363,7 @@ function Sim.Render(cv)
 		local ty = y + math.floor((ALT - 12) / 2)
 		cv:Text(c.cost, ty, x.cost and G(x.cost) or "—", GameFontHighlightSmall, COL.cost, "RIGHT")
 		cv:Text(c.skill, ty, tostring(x.skill or "—"), GameFontDisableSmall, COL.skill, "RIGHT")
-		cv:Text(c.quality, ty, x.quality and ns.QIcon(x.quality, r.maxQuality, 14) or "—",
+		cv:Text(c.quality, ty, x.quality and ns.QIcon(x.quality, r.maxQuality) or "—",
 			GameFontHighlightSmall, COL.quality, "CENTER")
 		local concTxt = "—"
 		if x.semConc then

@@ -348,7 +348,7 @@ function Plan.Render(cv)
 						if x + 52 > X_MAT - 70 then break end
 						local r = u.row
 						cv:Icon(x + 6, sy + 4, 32, V.ItemIcon(r.concItemID, r.icon), {
-							count = tostring(u.crafts), quality = ns.QIcon(r.concQuality or 2, r.maxQuality, 12),
+							count = tostring(u.crafts), quality = ns.QIconOn(r.concQuality or 2, r.maxQuality, 32),
 							corner = r.concTrend and P.TrendText(r.concTrend) or nil,
 							rarity = r.concItemID and C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(r.concItemID) or nil,
 							link = r.concItemID and select(2, C_Item.GetItemInfo(r.concItemID)) or nil,
@@ -422,7 +422,7 @@ function Plan.DrawHold(cv, x, sy, w, it)
 	end
 	cv:Icon(x + 6, sy + 4, 32, V.ItemIcon(r.concItemID, r.icon), {
 		count = "1", desaturate = true, border = { 0.83, 0.69, 0.22 },
-		quality = ns.QIcon(r.concQuality or 2, r.maxQuality, 12), tip = tip })
+		quality = ns.QIcon(r.concQuality or 2, r.maxQuality), tip = tip })
 	cv:Box(x + 46, sy + 5, 64, 18, 0.83, 0.69, 0.22, 0.95)
 	cv:Text(x + 46, sy + 8, "|cff14213d" .. L["SEGURE"] .. "|r", GameFontNormalSmall, 64, "CENTER")
 	cv:Text(x + 116, sy + 8, string.format(L["até %s · ~%s"], ns.ConcStr(math.floor(hd.need + 0.5), it.e and it.e.professionID), Hours(hd.waitH)), GameFontHighlightSmall, w - 120)

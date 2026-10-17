@@ -846,7 +846,7 @@ local function ItemColor(id)
 end
 local function Name(id, ilvl)
 	local q = ns.Scanner and ns.Scanner.ReagentQuality and ns.Scanner.ReagentQuality(id)
-	return ItemColor(id) .. ItemName(id) .. "|r" .. (q and (" " .. ns.QIcon(q, 2, 12)) or "")
+	return ItemColor(id) .. ItemName(id) .. "|r" .. (q and (" " .. ns.QIcon(q, 2)) or "")
 		.. ((ilvl and ilvl > 0) and (" |cff9d9d9d" .. ilvl .. "|r") or "")
 end
 
