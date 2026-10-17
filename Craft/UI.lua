@@ -332,7 +332,7 @@ function UI.AuditView.Render(cv)
 	cv:Box(0, y, 3, 56, 0.70, 0.13, 0.20, 0.9)
 	cv:Icon(8, y + 10, 36, V.ItemIcon(r.concItemID or r.itemID, r.icon), {
 		rarity = (r.itemID and C_Item.GetItemQualityByID) and C_Item.GetItemQualityByID(r.itemID) or nil,
-		quality = r.quality and ns.QIconOn(r.quality, r.maxQuality, 36) or nil,
+		qTier = (r.quality) and (r.quality) or nil, qMax = r.maxQuality,
 		link = r.saleLink or (r.itemID and select(2, C_Item.GetItemInfo(r.itemID))) })
 	cv:Text(52, y + 8, r.name or "?", GameFontNormalLarge, W - 320)
 	cv:Text(52, y + 30, string.format("|cff9d9d9drecipe %s · item %s · %s|r",

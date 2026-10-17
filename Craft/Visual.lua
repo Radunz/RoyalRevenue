@@ -186,6 +186,11 @@ function Canvas:Icon(x, y, size, texture, o)
 		btn.count:SetPoint("BOTTOMRIGHT", -2, 2)
 		btn.q = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		btn.q:SetPoint("TOPLEFT", 1, -1)
+		-- Marca de qualidade como TEXTURA. Como FontString ela nunca encostava no canto nem chegava
+		-- ao tamanho do jogo: a linha de texto tem altura própria e o glifo fica centrado nela.
+		btn.qtex = btn:CreateTexture(nil, "OVERLAY", nil, 3)
+		btn.qtex:SetPoint("TOPLEFT", btn, "TOPLEFT", -1, 1)
+		btn.qtex:Hide()
 		-- texto pequeno no canto de cima (ex.: tendência do preço "-25%")
 		btn.corner = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
 		btn.corner:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 4, 6)
@@ -239,7 +244,24 @@ function Canvas:Icon(x, y, size, texture, o)
 	-- quantidade em vermelho quando falta (reagente/concentração insuficiente)
 	local cc = o.countColor
 	b.count:SetTextColor(cc and cc[1] or 1, cc and cc[2] or 1, cc and cc[3] or 1)
-	b.q:SetText(o.quality or "")
+	-- qualidade: o.qTier (número) desenha a textura, como o jogo; o.quality (texto) é o caminho
+	-- antigo, ainda usado onde a marca aparece dentro de uma frase
+	if o.qTier and ns.QAtlas then
+		local atlas = ns.QAtlas(o.qTier, o.qMax)
+		if atlas then
+			local h = math.max(10, math.floor(size * (ns.QICON_FRAC or 0.45) + 0.5))
+			b.qtex:SetAtlas(atlas)
+			b.qtex:SetSize(ns.QAtlasW(atlas, h), h)
+			b.qtex:Show()
+			b.q:SetText("")
+		else
+			b.qtex:Hide()
+			b.q:SetText(ns.QIcon(o.qTier, o.qMax))
+		end
+	else
+		b.qtex:Hide()
+		b.q:SetText(o.quality or "")
+	end
 	b.corner:SetText(o.corner or "")
 	b.tip, b.link, b.onClick = o.tip, o.link, o.onClick
 	return b

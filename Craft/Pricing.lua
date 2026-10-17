@@ -72,11 +72,41 @@ end
 -- Tamanho padrão da marca de qualidade em texto. Um só, para a marca não aparecer de um jeito
 -- em cada tela (era 10, 11, 12 e 14 conforme o lugar).
 ns.QICON_SIZE = 16
--- Marca SOBRE um ícone de item: proporção fixa do ícone, como o jogo faz. Antes cada chamada
--- escolhia um número solto — 12 sobre um ícone de 34 dá 35%, sobre um de 22 dá 55%.
-ns.QICON_FRAC = 0.45
-function ns.QIconOn(q, maxQ, iconSize)
-	return ns.QIcon(q, maxQ, math.max(10, math.floor((iconSize or 32) * ns.QICON_FRAC + 0.5)))
+-- Marca SOBRE um ícone de item: proporção fixa do ícone, como o jogo faz. Quem desenha é o
+-- Canvas:Icon, como TEXTURA (ver ns.QAtlas) — markup de texto nunca encostava no canto.
+ns.QICON_FRAC = 0.50   -- metade da altura do ícone: é a proporção que o jogo usa nos reagentes
+
+-- nome do atlas da marca de qualidade (ou nil se o cliente não tiver nenhum deles)
+local qAtlas = {}
+function ns.QAtlas(q, maxQ)
+	if not q then return nil end
+	maxQ = maxQ or 2
+	local key = q .. ":" .. maxQ
+	local v = qAtlas[key]
+	if v ~= nil then return v or nil end
+	local names = {}
+	if maxQ <= 2 then
+		table.insert(names, "Professions-Icon-Quality-12-Tier" .. q)
+		table.insert(names, "Professions-ChatIcon-Quality-12-Tier" .. q)
+	end
+	-- o -Small é o que o jogo usa sobre os ícones dos reagentes
+	table.insert(names, "Professions-Icon-Quality-Tier" .. q .. "-Small")
+	table.insert(names, "Professions-Icon-Quality-Tier" .. q)
+	table.insert(names, "Professions-ChatIcon-Quality-Tier" .. q)
+	for _, n in ipairs(names) do
+		if AtlasOK(n) then qAtlas[key] = n; return n end
+	end
+	qAtlas[key] = false
+	return nil
+end
+
+-- largura que mantém a proporção do atlas para uma dada altura
+function ns.QAtlasW(atlas, h)
+	local okA, info = pcall(C_Texture and C_Texture.GetAtlasInfo or function() end, atlas)
+	if okA and info and (info.width or 0) > 0 and (info.height or 0) > 0 then
+		return math.max(1, math.floor(h * info.width / info.height + 0.5))
+	end
+	return h
 end
 
 function ns.QIcon(q, maxQ, size)

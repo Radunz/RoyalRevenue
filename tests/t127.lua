@@ -49,16 +49,34 @@ print(string.format("  sem passar tamanho -> altura %s  %s", tostring(hp),
 	hp == C.QICON_SIZE and "ok" or "FALHA"))
 
 print("")
-print("=== marca SOBRE ícone: proporção fixa do ícone, como o jogo ===")
+print("=== marca SOBRE ícone: TEXTURA, não texto ===")
+-- Como FontString a marca nunca encostava no canto nem chegava ao tamanho do jogo: a linha de
+-- texto tem altura própria e o glifo fica centrado nela. O jogo usa textura; o addon também.
+print("  atlas escolhido para ★2 de 2: " .. tostring(C.QAtlas(2, 2)))
+print("  atlas escolhido para ★3 de 5: " .. tostring(C.QAtlas(3, 5)))
 print("  ns.QICON_FRAC = " .. tostring(C.QICON_FRAC))
 local okFrac = true
 for _, icone in ipairs({ 18, 22, 26, 32, 34, 36 }) do
-	local h = medir(C.QIconOn(2, 2, icone))
-	local esperado = math.max(10, math.floor(icone * C.QICON_FRAC + 0.5))
-	if h ~= esperado then okFrac = false end
-	print(string.format("  ícone %2d -> marca %s (%.0f%% do ícone)  %s", icone, tostring(h),
-		(h or 0) / icone * 100, h == esperado and "ok" or "FALHA"))
+	local h = math.max(10, math.floor(icone * C.QICON_FRAC + 0.5))
+	local w = C.QAtlasW(C.QAtlas(2, 2), h)
+	local esperadoW = math.floor(h * 15 / 17 + 0.5)
+	if w ~= esperadoW then okFrac = false end
+	print(string.format("  ícone %2d -> marca %dx%d (%.0f%% do ícone, proporcional %d)  %s",
+		icone, w, h, h / icone * 100, esperadoW, w == esperadoW and "ok" or "FALHA"))
 end
+
+print("")
+print("=== o Canvas:Icon desenha a textura e some com o texto ===")
+local cv = RR.Craft.Visual.Create(LucroCraftFrame or CreateFrame("Frame"))
+cv:Begin()
+local b1 = cv:Icon(0, 0, 32, 134400, { qTier = 2, qMax = 2 })
+local b2 = cv:Icon(0, 40, 32, 134400, {})
+cv:End(100)
+local marcou = b1.qtex and b1.qtex._shown
+local limpo = (b1.q._text or "") == ""
+local semMarca = b2.qtex and not b2.qtex._shown
+print(string.format("  com qTier: textura visivel=%s, texto vazio=%s", tostring(marcou), tostring(limpo)))
+print(string.format("  sem qTier: textura escondida=%s", tostring(semMarca)))
 
 print("")
 print("=== nenhum lugar do addon passa tamanho solto ===")
@@ -91,5 +109,6 @@ C_Texture.GetAtlasInfo = origInfo
 
 print("")
 local ok = okProp and okFrac and #soltos == 0 and hp == C.QICON_SIZE and semApi == "Q3"
+	and marcou and limpo and semMarca and C.QAtlas(2, 2) ~= nil
 print(ok and "OK: marca na proporcao do jogo, um tamanho padrao e proporcao fixa sobre icone"
 	or string.format("FALHA (prop=%s frac=%s soltos=%d)", tostring(okProp), tostring(okFrac), #soltos))

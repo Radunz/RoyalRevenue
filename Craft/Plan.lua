@@ -348,7 +348,7 @@ function Plan.Render(cv)
 						if x + 52 > X_MAT - 70 then break end
 						local r = u.row
 						cv:Icon(x + 6, sy + 4, 32, V.ItemIcon(r.concItemID, r.icon), {
-							count = tostring(u.crafts), quality = ns.QIconOn(r.concQuality or 2, r.maxQuality, 32),
+							count = tostring(u.crafts), qTier = r.concQuality or 2, qMax = r.maxQuality,
 							corner = r.concTrend and P.TrendText(r.concTrend) or nil,
 							rarity = r.concItemID and C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(r.concItemID) or nil,
 							link = r.concItemID and select(2, C_Item.GetItemInfo(r.concItemID)) or nil,

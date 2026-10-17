@@ -572,7 +572,7 @@ function Invest._RenderGathering(cv, e, W)
 		end
 		cv:Icon(x + 8, y + 16, 34, V.ItemIcon(b.itemID), {
 			count = c.have > 0 and tostring(c.have) or nil, corner = StatTag(b.stat),
-			quality = b.quality and ns.QIconOn(b.quality, 2, 32) or nil,
+			qTier = (b.quality) and (b.quality) or nil, qMax = 2,
 			border = left and { 0.3, 0.6, 1 } or (good and { 0.3, 1, 0.3 } or nil),
 			desaturate = c.have == 0,
 			link = select(2, C_Item.GetItemInfo(b.itemID)), tip = tip })
@@ -635,7 +635,7 @@ function Invest.Render(cv)
 		if k > 3 then break end
 		local r = u.row
 		cv:Icon(x, 2, 34, V.ItemIcon(r.concItemID, r.icon), {
-			count = root.Num(u.crafts, 0), quality = ns.QIconOn(r.concQuality or 2, r.maxQuality, 34),
+			count = root.Num(u.crafts, 0), qTier = r.concQuality or 2, qMax = r.maxQuality,
 			tip = function(tt)
 				if r.concItemID then tt:SetItemByID(r.concItemID) else tt:SetText(r.name or "?") end
 				tt:AddLine(" ")
@@ -718,7 +718,7 @@ function Invest.Render(cv)
 					-- caía no item base e saía em ★2 (era o caso do acessório 2 do Saalla)
 					local cTier = CandTier(u.c, u.r)
 					cv:Icon(ux + 6, cy + 80, 34, V.ItemIcon(u.c.itemID), {
-						rarity = rarity, quality = cTier and ns.QIconOn(cTier, 5, 34) or nil,
+						rarity = rarity, qTier = (cTier) and (cTier) or nil, qMax = 5,
 						link = CandLink(u.c, u.r), tip = CandTip(u.c, u.r),
 						count = badge })
 					if u.showcase then
@@ -758,7 +758,7 @@ function Invest.Render(cv)
 			local cur = inv.toolEnchant and EI[inv.toolEnchant]
 			cv:Text(8, y + 12, L["Encantamento da ferramenta:"], GameFontNormalSmall)
 			cv:Icon(170, y + 2, 32, cur and V.ItemIcon(cur[1]) or 136244, {
-				quality = cur and ns.QIconOn(cur[2], 2, 32) or nil, desaturate = not cur, border = cur and { 0.6, 0.6, 0.6 } or { 1, 0.3, 0.3 },
+				qTier = (cur) and (cur[2]) or nil, qMax = 2, desaturate = not cur, border = cur and { 0.6, 0.6, 0.6 } or { 1, 0.3, 0.3 },
 				tip = function(tt)
 					if cur then tt:SetItemByID(cur[1]) else tt:SetText(L["Sem encantamento"]) end
 				end })
@@ -771,7 +771,7 @@ function Invest.Render(cv)
 				ex = ex + 16
 				for _, u in ipairs(ups) do
 					cv:Icon(ex, y + 2, 32, V.ItemIcon(u.opt.itemID), {
-						quality = ns.QIconOn(2, 2, 32), link = select(2, C_Item.GetItemInfo(u.opt.itemID)),
+						qTier = 2, qMax = 2, link = select(2, C_Item.GetItemInfo(u.opt.itemID)),
 						tip = function(tt)
 							tt:SetItemByID(u.opt.itemID)
 							tt:AddLine(" ")
@@ -822,7 +822,7 @@ function Invest.Render(cv)
 			for _, b in ipairs(bf) do
 				local good = b.net and b.net > 0
 				cv:Icon(bx, y, 34, V.ItemIcon(b.itemID), {
-					quality = ns.QIconOn(b.quality, 2, 32), link = select(2, C_Item.GetItemInfo(b.itemID)),
+					qTier = b.quality, qMax = 2, link = select(2, C_Item.GetItemInfo(b.itemID)),
 					border = good and { 0.3, 1, 0.3 } or { 0.6, 0.6, 0.6 }, desaturate = (b.net ~= nil and not good),
 					tip = function(tt)
 						tt:SetItemByID(b.itemID)
@@ -1059,7 +1059,7 @@ function Invest.Render(cv)
 				local row = RowOf(m.name)
 				local withTop = (m.needTop or m.need) < m.need
 				cv:Icon(mx + 8, y, 34, row and V.ItemIcon(row.concItemID, row.icon) or 134400, {
-					count = "+" .. (m.needTop or m.need), quality = ns.QIconOn(2, 2, 32),
+					count = "+" .. (m.needTop or m.need), qTier = 2, qMax = 2,
 					border = withTop and { 0.4, 0.8, 1 } or nil, tip = MsTip(m, row) })
 				cv:Text(mx, y + 36, "|cff55ff55+" .. G(m.gain) .. "|r", GameFontHighlightSmall, 50, "CENTER")
 				mx = mx + 56

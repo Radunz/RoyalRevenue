@@ -1489,3 +1489,32 @@ possível mantenha igual para todos os ícones usados no addon."
 ### Nota
 A suíte não muda fora do t127 porque o harness não tem o atlas do jogo e a marca cai no texto — por
 isso o t127 simula a API explicitamente. O efeito visual só aparece no jogo.
+
+## v1.39.3 — a marca de qualidade virou TEXTURA, como no jogo (print do Rafael)
+Dois prints lado a lado, um do addon e um do jogo: "quero que os ícones do addon demonstrem a
+qualidade da mesma forma".
+
+- **Por que a v1.39.2 não bastou.** Lá eu corrigi a proporção do atlas, mas a marca continuava sendo
+  um **FontString com markup**. FontString tem métrica de fonte: a linha tem altura própria e o
+  glifo fica centrado nela, com folga em volta. Por isso a marca nunca encostava no canto nem
+  alcançava o tamanho do jogo, por mais que o número subisse. O jogo desenha uma **textura ancorada
+  no canto** — e agora o addon também.
+- `Canvas:Icon` ganhou `btn.qtex`, uma textura em OVERLAY ancorada no `TOPLEFT` com 1px de
+  transbordo, como a do jogo. A opção nova é `qTier`/`qMax` (números); a antiga `quality` (texto)
+  continua existindo para onde a marca aparece dentro de uma frase.
+- `ns.QAtlas(q, maxQ)` escolhe o atlas **certo para ícone**: prefere `Professions-Icon-Quality-...`
+  (o que o jogo usa sobre reagentes) em vez do `ChatIcon`, que é feito para texto. `ns.QAtlasW`
+  devolve a largura que mantém a proporção.
+- As **11 chamadas** que desenham marca sobre ícone (Fila, Plano, Investimento, Simular, Receitas)
+  foram convertidas. A `ns.QIconOn`, criada na v1.39.2, ficou sem uso e foi removida — a varredura
+  de função morta voltou a zero.
+- **Proporção em 50%** da altura do ícone, que é a que o jogo usa nos reagentes (`ns.QICON_FRAC`).
+  Num ícone de 32 a marca sai 14x16; num de 26, 11x13.
+- Sem o atlas no cliente, continua caindo no texto ("Q2"), sem erro.
+- Teste: t127.lua passou a testar o caminho que de fato roda — o atlas escolhido, a proporção em 6
+  tamanhos de ícone, e o `Canvas:Icon` mostrando a textura e limpando o texto (e escondendo a
+  textura quando não há qualidade).
+
+### Nota
+Fora do t127 a suíte não muda: o harness não tem o atlas do jogo. **O efeito só aparece no jogo** —
+se a marca ficar grande ou pequena demais, é um número só (`ns.QICON_FRAC`, hoje 0,50).

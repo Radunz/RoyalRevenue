@@ -348,7 +348,7 @@ function Sim.Render(cv)
 		local rx = c.reag
 		for _, g in ipairs(x.reagentes or {}) do
 			cv:Icon(rx, y + 2, ICON, V.ItemIcon(g.itemID), {
-				quality = ns.QIconOn(g.q, g.maxQ, ICON),
+				qTier = g.q, qMax = g.maxQ,
 				count = tostring(g.qty),
 				rarity = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(g.itemID) or nil,
 				link = select(2, C_Item.GetItemInfo(g.itemID)),

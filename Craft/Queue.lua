@@ -1197,7 +1197,7 @@ function Queue.Render(cv)
 			local id = VariantItem(r, it.variant)
 			local q = VariantQuality(r, it.variant)
 			qc:Icon(8, ly + 2, 32, V.ItemIcon(id, r.icon), {
-				count = tostring(it.n), quality = (q and r.maxQuality and r.maxQuality > 1) and ns.QIconOn(q, r.maxQuality, 32) or nil,
+				count = tostring(it.n), qTier = ((q and r.maxQuality and r.maxQuality > 1)) and (q) or nil, qMax = r.maxQuality,
 				rarity = id and C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id) or nil,
 				link = id and select(2, C_Item.GetItemInfo(id)) or nil,
 				tip = function(tt)
