@@ -1518,3 +1518,22 @@ qualidade da mesma forma".
 ### Nota
 Fora do t127 a suíte não muda: o harness não tem o atlas do jogo. **O efeito só aparece no jogo** —
 se a marca ficar grande ou pequena demais, é um número só (`ns.QICON_FRAC`, hoje 0,50).
+
+## v1.39.4 — "Qualidade" em português no cliente em inglês, e a cegueira que deixou passar
+Print do Rafael com a aba Simular aberta: as abas e as colunas em inglês (Recipes, Cost, Skill,
+Reagents) e **uma coluna em português: "Qualidade"**.
+
+- **A chave não tinha tradução EN** — e o `check.sh` estrito, que eu liguei na v1.37.1 justamente
+  para isso, não acusou. O motivo está escrito no próprio CLAUDE.md como limite conhecido:
+  o verificador só enxerga `L["literal"]`. O rótulo da coluna vai como **variável** para o `Head`,
+  que resolve `L[rotulo]` lá dentro — e escapava.
+- **`tools/loccheck.py` passou a seguir rótulo indireto**: para `OHead` e `Head` (as duas funções do
+  addon que resolvem `L[]` por dentro), ele separa os argumentos respeitando aspas e parênteses e
+  confere o rótulo. Conferido na prática: removendo "Qualidade" do Locale, o check acusa
+  `[Craft\Simulate.lua (via Head)] Qualidade` e falha. O limite deixou de ser um limite.
+  - De quebra, passou a enxergar **34 rótulos** que antes não contava (todos já traduzidos).
+- **Mensagem de resumo da aba Simular**: no print, o conjunto mais barato pede ~396 de concentração
+  e o Rafael tem 290 — ou seja, rende **0 crafts**. Dizer "o melhor rende 601g a mais que o mais
+  barato" quando o mais barato não rende nada é conversa estranha. Agora, nesse caso, a linha diz
+  que **o mais barato não cabe na sua concentração**, quanto ele pede e quanto você tem.
+- Teste: t126.lua ganhou o cenário de concentração insuficiente (o do print).

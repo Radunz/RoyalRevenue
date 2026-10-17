@@ -86,6 +86,22 @@ print("  existe: " .. tostring(semConc ~= nil) ..
 	(semConc and ("  combo " .. table.concat(semConc.combo, "-") .. " sai direto na ★3") or ""))
 
 print("")
+print("=== quando o mais barato NAO cabe na concentracao ===")
+-- o print do Rafael: 290 de concentracao, o conjunto mais barato pedindo ~396. Dizer "rende X a
+-- mais que o mais barato" quando o mais barato nao rende NADA e conversa estranha.
+local entryPouca = { professionID = 2906, sig = "x", conc = { cur = 250, max = 1000 }, time = time() }
+local poucas = Sim.Run(r, entryPouca)
+local b0, m0
+for _, x in ipairs(poucas) do
+	if not b0 or x.cost < b0.cost then b0 = x end
+	if not m0 or (x.totalGold or 0) > (m0.totalGold or 0) then m0 = x end
+end
+print(string.format("  com 250 de concentracao: mais barato pede %s -> %s crafts · melhor pede %s -> %s crafts",
+	tostring(b0.conc), tostring(b0.crafts), tostring(m0.conc), tostring(m0.crafts)))
+local naoCabe = (b0.crafts or 0) == 0 and not b0.semConc
+print("  o mais barato nao cabe: " .. tostring(naoCabe))
+
+print("")
 print("=== receita sem escolha de qualidade: nada a simular ===")
 local simples = { recipeID = 1, name = "simples", itemID = 1, qty = 1, parts = { { slot = 1, itemID = 9, qty = 1 } } }
 local l2 = Sim.Run(simples, entry)
@@ -119,7 +135,7 @@ C.Pricing.Cost, C.Pricing.Sale = origCost, origSale
 print("")
 -- a linha sem concentração não compete no mesmo eixo: o limite dela é material/ouro
 local semConcLivre = semConc and semConc.crafts == nil and semConc.semConc
-local ok = #linhas == 4 and barato ~= melhor
+local ok = #linhas == 4 and barato ~= melhor and naoCabe
 	and (melhor.totalGold or 0) > (barato.totalGold or 0)
 	and (melhor.crafts or 0) > (barato.crafts or 0)
 	and semConcLivre

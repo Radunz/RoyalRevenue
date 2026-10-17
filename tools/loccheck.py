@@ -33,9 +33,41 @@ USO = re.compile(r'L\["((?:[^"\\]|\\.)*)"\]')
 DEF = re.compile(r'^\t\["((?:[^"\\]|\\.)*)"\]\s*=', re.M)
 DEFV = re.compile(r'^\t\["((?:[^"\\]|\\.)*)"\]\s*=\s*(.*?),?\s*$', re.M)
 
+# Rotulo passado por variavel: funcoes que resolvem L[arg] por DENTRO, e por isso escapavam da
+# busca por L["literal"]. Foi assim que "Qualidade" chegou na tela de um cliente em ingles ainda
+# em portugues, na aba Simular. Cada entrada e (nome da funcao, indice 1-based do argumento rotulo).
+INDIRETAS = [("OHead", 4), ("Head", 4)]
+
 
 def ler(caminho):
     return io.open(caminho, encoding="utf-8").read()
+
+
+def separa(args):
+    """Divide os argumentos de uma chamada pelas virgulas de topo, respeitando aspas e parenteses."""
+    partes, atual, nivel, aspas, escapou = [], [], 0, False, False
+    for ch in args:
+        if escapou:
+            atual.append(ch)
+            escapou = False
+            continue
+        if ch == "\\":
+            atual.append(ch)
+            escapou = True
+            continue
+        if ch == '"':
+            aspas = not aspas
+        elif not aspas and ch in "([{":
+            nivel += 1
+        elif not aspas and ch in ")]}":
+            nivel -= 1
+        elif not aspas and nivel == 0 and ch == ",":
+            partes.append("".join(atual))
+            atual = []
+            continue
+        atual.append(ch)
+    partes.append("".join(atual))
+    return partes
 
 
 def fontes(modulo):
@@ -61,8 +93,20 @@ def confere(modulo, listar_sem_uso):
 
     usadas = {}
     for rel in fontes(modulo):
-        for k in USO.findall(ler(os.path.join(RAIZ, rel))):
+        src = ler(os.path.join(RAIZ, rel))
+        for k in USO.findall(src):
             usadas.setdefault(k, rel)
+        # rotulos passados por variavel para quem resolve L[] por dentro
+        for fn, pos in INDIRETAS:
+            padrao = re.compile(r"\b" + fn + r"\s*\(([^)\n]*)\)")
+            for args in padrao.findall(src):
+                partes = separa(args)
+                if len(partes) < pos:
+                    continue
+                alvo = partes[pos - 1].strip()
+                m = re.match(r'^"((?:[^"\\]|\\.)*)"$', alvo)
+                if m:
+                    usadas.setdefault(m.group(1), rel + " (via " + fn + ")")
 
     faltando = sorted(k for k in usadas if k not in tem)
     sem_uso = sorted(k for k in tem if k not in usadas)

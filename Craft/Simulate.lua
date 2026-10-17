@@ -310,11 +310,22 @@ function Sim.Render(cv)
 	end
 	local y = 52
 	if maisBarata and melhorTotal and maisBarata ~= melhorTotal and (melhorTotal.totalGold or 0) > 0 then
-		local ganho = (melhorTotal.totalGold or 0) - (maisBarata.totalGold or 0)
-		cv:Text(8, y, string.format(
-			L["|cff55ff55O melhor conjunto rende %s a mais que o mais barato|r |cff9d9d9d(%s crafts contra %s)|r"],
-			G(ganho, true), tostring(melhorTotal.crafts or "?"), tostring(maisBarata.crafts or "?")),
-			GameFontHighlightSmall, W - 16)
+		-- "rende X a mais que o mais barato" vira conversa estranha quando o mais barato não rende
+		-- NADA: ele não cabe na concentração que você tem. Aí o que interessa é dizer isso.
+		if (maisBarata.crafts or 0) == 0 and not maisBarata.semConc then
+			cv:Text(8, y, string.format(
+				L["|cffff9e40O conjunto mais barato não cabe na sua concentração|r |cff9d9d9d(pede %s, você tem %s)|r · |cff55ff55o melhor rende %s em %s crafts|r"],
+				ns.ConcStr(maisBarata.conc or 0, e and e.professionID),
+				conc and tostring(math.floor(conc)) or "?",
+				G(melhorTotal.totalGold or 0, true), tostring(melhorTotal.crafts or "?")),
+				GameFontHighlightSmall, W - 16)
+		else
+			local ganho = (melhorTotal.totalGold or 0) - (maisBarata.totalGold or 0)
+			cv:Text(8, y, string.format(
+				L["|cff55ff55O melhor conjunto rende %s a mais que o mais barato|r |cff9d9d9d(%s crafts contra %s)|r"],
+				G(ganho, true), tostring(melhorTotal.crafts or "?"), tostring(maisBarata.crafts or "?")),
+				GameFontHighlightSmall, W - 16)
+		end
 		y = y + 18
 	end
 
