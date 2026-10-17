@@ -127,7 +127,12 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 - `tests/harness*.lua` simulam a API do WoW, carregam um SavedVariables real de `tests/fixtures/` e todos os arquivos na ordem do `.toc`, e disparam ADDON_LOADED / PLAYER_LOGIN / PLAYER_ENTERING_WORLD.
   - `FIRE(evento, ...)` dispara um evento; cada FIRE é um quadro novo (`GetTime` +0,0001).
   - `RUNTIMERS()` roda os `C_Timer.After` pendentes.
-- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t116.lua**).
+- **`harness13.lua` + `fixtures/sv13.lua`**: a fixture ATUAL (16/10), com os campos criados depois
+  da sv11 (`spdProjected`, `saleFromContainer`, `entry.ver`). Os testes antigos continuam na sv11
+  **de propósito** — a linha de base deles só vale se o dado não muda. Teste novo que precise de
+  dado realista usa o 13. Foi ele que mostrou que dominância de participação nem sempre é defeito:
+  o tecido é 68% da Alfaiataria porque vende 6.093/dia de verdade.
+- **Harness por fixture**: `harness11.lua`, `harness11d.lua` e `harness12.lua` usam sv11 (o mais novo, 07/10; o 12 expõe `ALLF` = todos os frames); `harness10.lua` usa sv10; `harness.lua` e `harness_ah.lua` (com `ConfirmCommoditiesPurchase`) usam o sv antigo. Os testes que só dão `dofile` em `svN.lua` usam a fixture da época. Os testes `tN.lua` são numerados pela ordem em que foram criados (próximo: **t125.lua**).
 - **Os testes são de regressão por diff, não de passa/falha.** Fluxo para qualquer mudança:
   ```bash
   cp -r RoyalRevenue baseline/RoyalRevenue          # antes de mexer (ou extrair o zip da versão anterior)

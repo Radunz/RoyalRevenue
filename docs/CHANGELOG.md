@@ -1343,3 +1343,27 @@ devolve fonte, nível (`firme` / `estimado` / `projetado` / `fraco`) e uma nota.
 
 ### Comportamento
 A refatoração é **neutra**: fora dos testes novos e do `t115`, a suíte não teve nenhuma diferença.
+
+## v1.38.2 — fixture atual (ideia 5), e o que ela mostrou
+Última das seis ideias. Feita sozinha de propósito: regenerar a fixture invalida todas as linhas de
+base ao mesmo tempo, e aí o diff não distingue mudança de código de mudança de dado.
+
+- **`fixtures/sv13.lua` + `harness13.lua`**: o SavedVariables de hoje. A sv11 é de 07/10 e não tem
+  os campos criados depois (`spdProjected`, `saleFromContainer`, `entry.ver`), então os testes
+  rodavam sobre uma realidade que já não existe — é por isso que o Bouquet da sv11 ainda conta 65,9%
+  no t118.
+- **Os testes antigos ficam na sv11**, de propósito: a linha de base de um teste de regressão só
+  vale enquanto o dado não muda. Quem precisar de dado realista usa o 13.
+- **t124.lua**: confere as correções desta série sobre o dado real — 965 receitas, as duas contas de
+  participação concordando em todas (`CountsInShare`), procedência (755 vendas firmes, 2 fracas), e
+  as 8 abas desenhando sem nada fora do canvas.
+
+### O que a fixture nova ensinou
+O primeiro teste acusou "Assorted Exotic Spices com 91,9% da Culinária" e eu quase tratei como o
+Bouquet de novo. Não era: aquela profissão tem **3 receitas** com venda, e a maior leva 92%
+honestamente. Depois apareceu "Bright Linen Bolt com 68,3% da Alfaiataria" — também legítimo: é o
+tecido, vende 6.093/dia de verdade, sem projeção e sem vínculo.
+
+**Dominar não é defeito.** O defeito é dominar *sem ser venda real* — projeção de baú ou item que
+nem vai para a casa de leilões, que foi o caso do Bouquet. O teste passou a acusar só isso, e
+ignora profissão com menos de 10 receitas, onde participação não significa nada.
