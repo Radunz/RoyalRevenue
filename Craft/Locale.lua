@@ -824,6 +824,7 @@ local T = {
 	["cheia em "] = "full in ",
 	["cheia"] = "full",
 	["Conc"] = "Conc",
+	["   preço de hoje (sem o desconto da tendência)"] = "   today's price (before the trend discount)",
 	["baú"] = "container",
 	["sem AH"] = "no AH",
 	["   é a velocidade do conteúdo do baú, não deste item: fica fora da % da profissão e da curva"] = "   that is the speed of the container's contents, not of this item: kept out of the profession % and the curve",

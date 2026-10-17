@@ -903,7 +903,9 @@ local function ShowTooltip(row)
 	if ns.IsTransmute(r) and r.sale and r.qty and r.expCost then
 		local cut = tonumber(Cfg("ahCut")) or 0.05
 		local mc = r.stats and r.stats.mc or 0
-		local net = r.sale * (1 - cut)
+		-- mesmo preço da conta do lucro (com a tendência descontada, se ligada): com r.sale cru,
+		-- este bloco contradizia a coluna Lucro da própria linha
+		local net = (r.saleProj or r.sale) * (1 - cut)
 		local procQty = (mc > 0 and r.expQty and r.expQty > r.qty) and (r.qty + (r.expQty - r.qty) / mc) or nil
 		local function Pf(q) local v = net * q - r.expCost; return (v >= 0 and "|cff55ff55" or "|cffff5555") .. P.FormatMoney(math.abs(v)) .. (v < 0 and " (-)" or "") .. "|r" end
 		GameTooltip:AddLine(" ")
@@ -968,8 +970,14 @@ local function ShowTooltip(row)
 		GameTooltip:AddDoubleLine(L["Extra por multicraft"], string.format("+%.1f · %s", ex, srcTxt), 1, 0.82, 0, 0.7, 0.7, 0.7)
 		GameTooltip:AddLine(L["Dados deste personagem com os pontos de conhecimento e o equipamento atuais."], 0.6, 0.6, 0.6, true)
 	end
+	-- a Venda tem de sair do MESMO preço do Lucro, senão as duas linhas se contradizem aqui mesmo
+	local vUnit = r.saleProj or r.sale
 	GameTooltip:AddDoubleLine(string.format(L["Venda (%.2f un esperadas, -%d%% AH)"], q, cut * 100),
-		r.sale and P.FormatMoney(r.sale * q * (1 - cut)) or "—", 1, 0.82, 0, 1, 1, 1)
+		vUnit and P.FormatMoney(vUnit * q * (1 - cut)) or "—", 1, 0.82, 0, 1, 1, 1)
+	if r.sale and vUnit and math.abs(r.sale - vUnit) >= 1 then
+		GameTooltip:AddDoubleLine(L["   preço de hoje (sem o desconto da tendência)"],
+			P.FormatMoney(r.sale * q * (1 - cut)), 0.6, 0.6, 0.6, 0.7, 0.7, 0.7)   -- preco de hoje de proposito
+	end
 	GameTooltip:AddDoubleLine(L["Lucro esperado"], P.FormatMoney(r.profit), 1, 0.82, 0, 1, 1, 1)
 	if r.profitBase and r.profit and math.abs(r.profit - r.profitBase) >= 1 then
 		GameTooltip:AddDoubleLine(L["Lucro sem stats"], P.FormatMoney(r.profitBase), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)

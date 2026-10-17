@@ -1241,3 +1241,24 @@ O `check.sh` estrito pegou (`locale: 1 sem EN`) — foi a primeira vez que ele b
 A fixture de teste é de 07/10 e não tem `spdProjected`, então o Bouquet dela ainda conta — é o
 retrato de quem não reabriu a profissão depois da v1.37.3. Nos dados reais do Rafael a marca já está
 gravada.
+
+## v1.37.6 — três lugares ainda calculavam o lucro pelo preço de hoje
+Achado ao procurar se o caso do `spdShare` × `spdPct` (v1.37.5) era isolado: não era.
+
+- O desconto de tendência (v1.37.0) mudou a conta do `Scanner` para `saleProj`/`concSaleProj`. Mas
+  **três lugares refazem a conta de lucro por conta própria** e ficaram no preço cheio:
+  - `Invest.lua` (2x): a aba Investimento ficava mais otimista que as Receitas e o Plano. Com -40%
+    de tendência a diferença era de **+38.000 em 142.000 — 27% a mais**.
+  - `UI.lua`, tooltip de transmutação: "Sem proc / Esperado / Empata com" saíam do preço cheio.
+  - `UI.lua`, tooltip da linha: mostrava **"Venda" pelo preço de hoje e "Lucro esperado" pelo
+    projetado, um embaixo do outro** — venda menos custo não batia com o lucro no mesmo tooltip.
+- Todos passaram a usar `r.saleProj or r.sale`. O tooltip da linha ganhou uma linha cinza com o
+  preço de hoje quando os dois diferem, para a informação não sumir.
+- **Teste de classe, não de caso** (t119.lua): além de conferir que Scanner e Invest dão o mesmo
+  número, ele **varre o fonte** de 8 arquivos procurando `r.sale *` / `r.concSale *` — a assinatura
+  de "estou refazendo a conta de lucro". Quem precisar do preço de hoje de propósito marca a linha
+  com `-- preco de hoje de proposito`, como faz a linha nova do tooltip.
+  No código anterior o teste acusa **6 suspeitos**.
+- Varredura de função exposta que ninguém chama: 6 (`Pricing.NumAuctions`,
+  `Scanner.InvalidateCraftMap`, `V.TrendShade`, `Livro/UI.ClearCache`, `root.ClearPriceCache`,
+  `root.TopTabTemplate`). Nenhuma é do caminho de cálculo; ficam para uma limpeza futura.

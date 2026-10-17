@@ -466,8 +466,12 @@ local function WeeklyValue(entry, d)
 			local q = ns.Scanner.ExpectedItems(r.qty, st, r.recipeID, ns.CharKey(), entry.sig)
 			if dd.mcExtra and q > r.qty then q = q + (q - r.qty) * dd.mcExtra end
 			local cost = ns.Scanner.ExpectedCost(r.cost, st)
-			local p1 = r.sale * q * (1 - cut) - cost
-			local p2 = r.concSale * q * (1 - cut) - cost
+			-- MESMO preço que o Scanner usa na conta (com a tendência descontada, se ligada): aqui
+			-- usava r.sale/r.concSale e o Investimento ficava mais otimista que as Receitas e o Plano
+			local v1 = r.saleProj or r.sale
+			local v2 = r.concSaleProj or r.concSale
+			local p1 = v1 * q * (1 - cut) - cost
+			local p2 = v2 * q * (1 - cut) - cost
 			-- só conta o que a concentração fabrica: lucro do craft feito com concentração
 			local gain = p2
 			-- d.skillBy (opcional): perícia extra por receita (nós da especialização que afetam cada uma)
@@ -1119,8 +1123,8 @@ function Invest.Evaluate(entry, prof)
 		if r.skill and r.difficulty and r.difficulty > r.skill and r.concSale and r.sale and not r.excluded and not r.mix then
 			local q = r.expQty or r.qty
 			local cost = r.expCost or r.cost
-			local p1 = r.sale * q * (1 - cut) - cost
-			local p2 = r.concSale * q * (1 - cut) - cost
+			local p1 = (r.saleProj or r.sale) * q * (1 - cut) - cost
+			local p2 = (r.concSaleProj or r.concSale) * q * (1 - cut) - cost
 			if p2 > math.max(p1, 0) then
 				local need = r.difficulty - r.skill
 				local needTop = r.skillTop and math.max(r.difficulty - r.skillTop, 0) or need
