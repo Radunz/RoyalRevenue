@@ -186,7 +186,4 @@ function Sales.GetRows()
 	return rows, sum
 end
 
-function Sales.Refresh()
-	-- a tela de vendas foi para o LucroLivro; aqui só ficam os dados (coluna Minhas/dia)
-end
 

@@ -228,6 +228,12 @@ function Plan.Render(cv)
 	cv:Text(8, 4, G(total, true), GameFontNormalLarge, W - 16, "RIGHT")
 	cv:Text(8, 22, string.format(L["|cff9d9d9dcada profissão tem a sua barra · regenera %.1f/h · %% no ícone = tendência do preço (|cffff5555caindo|r|cff9d9d9d / |cffffd100em pico|r|cff9d9d9d) · passe o mouse para detalhes|r"], Rate()),
 		GameFontDisableSmall)
+	-- carga parada e carga perdida: o aviso fica no topo, junto do total
+	local paradas, ouroParado = Plan.CargasParadas()
+	if paradas > 0 then
+		cv:Text(8, 22, string.format(L["|cffff5555%d carga(s) parada(s)|r |cff9d9d9d· %s|r"],
+			paradas, P.FormatGold(ouroParado)), GameFontDisableSmall, W - 16, "RIGHT")
+	end
 	local y = 42
 	if #list == 0 then
 		cv:Text(8, y, L["Nenhuma profissão com concentração salva. Abra suas profissões para escanear."], GameFontHighlight)
@@ -395,7 +401,151 @@ function Plan.Render(cv)
 		end
 		y = y + h
 	end
+	y = Plan.DrawCargas(cv, y, W)
 	cv:End(y + 8)
+end
+
+-- ===== Agenda de cargas =====
+-- Transmutação e companhia não gastam concentração: gastam CARGA, e a carga volta ~1/dia até um
+-- máximo. Quem já está no máximo está jogando carga fora todo dia — é o mesmo desperdício da
+-- barra de concentração cheia, e até aqui ninguém avisava. A v1.37.3 fez a carga limitar o plano;
+-- isto diz onde gastá-la.
+--
+-- Devolve a lista ordenada pelo LUCRO POR CARGA. Ordenar por "está cheia" primeiro parecia certo,
+-- mas na conta do Rafael enterrava a melhor receita (Wondrous Synergist, 36,91o, em 2/4) embaixo de
+-- quatro transmutações cheias e todas dando prejuízo. A urgência de "cheia" já aparece no destaque
+-- vermelho da linha; a ordem responde "onde gasto a carga".
+function Plan.Cargas()
+	local out = {}
+	for char, entries in pairs(LucroCraftDB.chars or {}) do
+		for _, e in pairs(entries) do
+			for _, r in ipairs(e.rows or {}) do
+				if r.cd and (r.cd.max or 0) > 0 and not r.excluded then
+					local cur, max, nextIn = ns.Charges(r)
+					if cur and max and cur > 0 then
+						-- o lucro de UM craft. Baú cujo conteúdo o addon ainda não aprendeu vem
+						-- sem preço: dizer isso é melhor que mostrar 0 e parecer que não vale.
+						local lucro = r.profit
+						table.insert(out, { char = char, e = e, row = r, prof = e.name or e.skillLine or "?",
+							cur = cur, max = max, nextIn = nextIn, lucro = lucro,
+							cheia = cur >= max, total = lucro and lucro * cur or nil })
+					end
+				end
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		local la, lb = a.lucro or -math.huge, b.lucro or -math.huge
+		if la ~= lb then return la > lb end
+		if a.cheia ~= b.cheia then return a.cheia end
+		return (a.row.name or "") < (b.row.name or "")
+	end)
+	return out
+end
+
+-- Piso de lucro por carga para o aviso (não para a tabela, que é para quem foi olhar). Na conta do
+-- Rafael o Arcanoweave Bolt fica 30/30 a 0,79o por carga: tecnicamente é ouro parado, na prática
+-- não se loga para fazer 30 crafts de 0,79o. Aviso que inclui isso é aviso que se aprende a pular.
+Plan.CARGA_PISO = 10000   -- 1o por carga
+
+-- Quantas cargas estão paradas no máximo E valem a pena gastar (para o aviso no login e o topo do
+-- plano). Exige lucro positivo de propósito: na conta do Rafael os quatro "Transmute: Mote" estão
+-- todos no máximo e todos dando prejuízo pelo preço de hoje. Não craftar esses é a decisão certa,
+-- não desperdício — contá-los viraria um aviso de 20 cargas que não quer dizer nada.
+function Plan.CargasParadas()
+	local n, g = 0, 0
+	for _, c in ipairs(Plan.Cargas()) do
+		if c.cheia and c.lucro and c.lucro >= Plan.CARGA_PISO then
+			n = n + c.cur
+			g = g + c.lucro * c.cur
+		end
+	end
+	return n, g
+end
+
+local CARGA_LINHA = 28
+
+function Plan.DrawCargas(cv, y, W)
+	local cargas = Plan.Cargas()
+	if #cargas == 0 then return y end
+	local G, V = P.FormatGold, ns.Visual
+	y = y + 10
+	cv:Box(0, y, W, 18, 0.08, 0.13, 0.24, 0.95)
+	cv:Box(0, y + 17, W, 1, 0.83, 0.69, 0.22, 0.6)
+	cv:Text(8, y + 2, "|cffd4af37" .. L["Agenda de cargas"] .. "|r", GameFontNormalSmall, 240)
+	local paradas, ouro = Plan.CargasParadas()
+	if paradas > 0 then
+		cv:Text(8, y + 2, string.format(L["|cffff5555%d carga(s) parada(s) no máximo|r |cff9d9d9d· %s esperando|r"],
+			paradas, G(ouro)), GameFontDisableSmall, W - 16, "RIGHT")
+	else
+		cv:Text(8, y + 2, L["|cff9d9d9dnenhuma carga parada no máximo|r"], GameFontDisableSmall, W - 16, "RIGHT")
+	end
+	y = y + 22
+	cv:Text(8, y, L["|cff9d9d9dCarga não acumula além do máximo: a que fica parada é perdida no dia seguinte. Clique para abrir a receita.|r"],
+		GameFontDisableSmall, W - 16)
+	y = y + 16
+
+	local X_IC, X_NOME, X_CHAR = 8, 40, 300
+	local X_CARGA, X_PROX, X_UNIT, X_TOTAL = W - 420, W - 330, W - 230, W - 120
+	cv:Text(X_NOME, y, "|cffd4af37" .. L["Receita"] .. "|r", GameFontNormalSmall, X_CHAR - X_NOME - 8)
+	cv:Text(X_CHAR, y, "|cffd4af37" .. L["Personagem"] .. "|r", GameFontNormalSmall, 160)
+	cv:Text(X_CARGA, y, "|cffd4af37" .. L["Cargas"] .. "|r", GameFontNormalSmall, 82, "CENTER")
+	cv:Text(X_PROX, y, "|cffd4af37" .. L["Próxima"] .. "|r", GameFontNormalSmall, 92, "RIGHT")
+	cv:Text(X_UNIT, y, "|cffd4af37" .. L["Por carga"] .. "|r", GameFontNormalSmall, 100, "RIGHT")
+	cv:Text(X_TOTAL, y, "|cffd4af37" .. L["Agora"] .. "|r", GameFontNormalSmall, 112, "RIGHT")
+	y = y + 16
+
+	for i, c in ipairs(cargas) do
+		local r = c.row
+		root.Zebra(cv, i, 0, y, W, CARGA_LINHA)
+		-- carga parada = ouro escorrendo: merece fundo, igual à melhor linha do simulador
+		if c.cheia and c.lucro and c.lucro > 0 then cv:Box(0, y, W, CARGA_LINHA, 1, 0.3, 0.3, 0.10) end
+		cv:Icon(X_IC, y + 1, 26, V.ItemIcon(r.itemID, r.icon), { qTier = r.quality, qMax = r.maxQuality,
+			link = r.saleLink })
+		local ty = y + 8
+		cv:Text(X_NOME, ty, V.ItemName(r.itemID) or r.name or "?", GameFontHighlightSmall, X_CHAR - X_NOME - 8)
+		cv:Text(X_CHAR, ty, string.format("|cff9d9d9d%s · %s|r", Short(c.char), c.prof), GameFontDisableSmall, 160)
+		cv:Text(X_CARGA, ty, string.format(c.cheia and "|cffff5555%d/%d|r" or "%d/%d", c.cur, c.max),
+			GameFontHighlightSmall, 82, "CENTER")
+		cv:Text(X_PROX, ty, c.nextIn and Hours(c.nextIn / 3600) or L["|cffff5555cheia|r"],
+			GameFontDisableSmall, 92, "RIGHT")
+		if c.lucro then
+			cv:Text(X_UNIT, ty, G(c.lucro, true), GameFontHighlightSmall, 100, "RIGHT")
+			cv:Text(X_TOTAL, ty, G(c.total, true), GameFontNormalSmall, 112, "RIGHT")
+		else
+			cv:Text(X_UNIT, ty, L["|cff9d9d9dsem preço|r"], GameFontDisableSmall, 100, "RIGHT")
+			cv:Text(X_TOTAL, ty, "-", GameFontDisableSmall, 112, "RIGHT")
+		end
+		cv:Hit(X_NOME, y, W - X_NOME, CARGA_LINHA,
+			r.recipeID and function()
+				if C_TradeSkillUI and C_TradeSkillUI.OpenRecipe then pcall(C_TradeSkillUI.OpenRecipe, r.recipeID) end
+				ns.UI.SelectedRecipeID = r.recipeID
+			end or nil,
+			function(tt)
+				tt:SetText(r.name or "?")
+				tt:AddLine(" ")
+				tt:AddDoubleLine(L["Cargas"], string.format("%d / %d", c.cur, c.max), 1, 0.82, 0, 1, 1, 1)
+				if c.nextIn then
+					tt:AddDoubleLine(L["Próxima carga em"], Hours(c.nextIn / 3600), 1, 0.82, 0, 1, 1, 1)
+				else
+					tt:AddLine(L["No máximo: a próxima carga que nascer é perdida."], 1, 0.3, 0.3, true)
+				end
+				if c.lucro then
+					tt:AddDoubleLine(L["Lucro por carga"], G(c.lucro, true), 1, 0.82, 0, 1, 1, 1)
+					tt:AddDoubleLine(L["Gastando as cargas de agora"], G(c.total, true), 1, 0.82, 0, 1, 1, 1)
+					if c.lucro < 0 then
+						tt:AddLine(L["Dá prejuízo pelo preço de hoje: guarde a carga."], 1, 0.6, 0.2, true)
+					end
+				else
+					tt:AddLine(L["Sem preço de venda: se for um baú, abra um para o addon aprender o conteúdo."], 1, 0.6, 0.2, true)
+				end
+				if ns.IsTransmute and ns.IsTransmute(r) then
+					tt:AddLine(L["Transmutação: não gasta concentração, gasta carga."], 0.4, 0.8, 1, true)
+				end
+			end)
+		y = y + CARGA_LINHA
+	end
+	return y
 end
 
 -- ===== Segurar a concentração para a melhor receita =====

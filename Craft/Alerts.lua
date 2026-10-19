@@ -94,6 +94,28 @@ function Alerts.Show(fromLogin)
 		any = true
 		ns.Print(L["|cffffd100Reset semanal:|r fontes semanais de conhecimento liberadas (missão da profissão, tratado, tesouros) — confira em cada personagem."])
 	end
+	-- carga de transmutacao nao acumula alem do maximo: a que fica parada e perdida no dia
+	-- seguinte. E o mesmo desperdicio da barra de concentracao cheia, que ja era avisado aqui.
+	if ns.Plan and ns.Plan.Cargas then
+		local paradas = {}
+		for _, c in ipairs(ns.Plan.Cargas()) do
+			-- o mesmo piso do Plan.CargasParadas, senao o aviso e o numero do topo do plano
+			-- discordariam na cara do usuario
+			if c.cheia and (c.lucro or 0) >= (ns.Plan.CARGA_PISO or 0) then table.insert(paradas, c) end
+		end
+		if #paradas > 0 then
+			any = true
+			ns.Print(L["|cffff5555Cargas paradas no máximo (a próxima é perdida):|r"])
+			for i, c in ipairs(paradas) do
+				if i > 6 then
+					print(string.format(L["   ... e mais %d"], #paradas - 6))
+					break
+				end
+				print(string.format(L["   %s · %s: %d/%d · %s por carga"], Short(c.char),
+					c.row.name or "?", c.cur, c.max, ns.Pricing.FormatGold(c.lucro)))
+			end
+		end
+	end
 	if #stale > 0 then
 		any = true
 		local names = {}

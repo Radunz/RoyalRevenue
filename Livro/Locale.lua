@@ -339,5 +339,6 @@ local T = {
 	["Consumíveis usados"] = "Consumables used",
 	["Consumíveis usados (custo de reposição)"] = "Consumables used (replacement cost)",
 	["Rateio: o desgaste do equipamento (custo de reparo de cada peça) é anotado na atividade onde aconteceu (morte, combate); o reparo pago é dividido entre essas atividades na mesma proporção. Consumíveis usados entram pelo preço de mercado (custo de reposição); os ganhos de graça (caldeirão, recompensa, saque) não custam. Visão gerencial: a DRE continua com as compras quando acontecem. Passe o mouse num centro para ver o detalhe."] = "Allocation: equipment wear (repair cost of each piece) is noted in the activity where it happened (death, combat); the repair paid is split among those activities in the same proportion. Consumables used are valued at market price (replacement cost); free ones (cauldron, rewards, loot) cost nothing. Management view: the income statement keeps purchases when they happen. Hover a center for details.",
+	["Pedido de fabricação que você encomendou"] = "Crafting order you placed",
 }
 for k, v in pairs(T) do L[k] = v end

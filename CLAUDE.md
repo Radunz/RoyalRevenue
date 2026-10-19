@@ -177,6 +177,28 @@ Ler direto o arquivo (`_retail_\WTF\Account\REDSHARKBR\SavedVariables\RoyalReven
 - `LucroCraftDB.ordersDebug`: cópia crua dos pedidos lidos (5 níveis), com `minQuality`, `reagents` e
   `npcOrderRewards`. Recompensa em moeda vem como `{ count, currencyType }`, **sem** `itemLink`.
 
+## Apurar lucro REALIZADO de um item (não o previsto)
+O SavedVariables do addon diz o que ele **prevê**. Para o que de fato aconteceu, a fonte é o
+**TSM Accounting**: `_retail_\WTF\Account\REDSHARKBR\SavedVariables\TradeSkillMaster.lua`, chaves
+`r@<reino>@internalData@csv{Sales,Buys,Expired,Cancelled}` — CSV com
+`itemString,stackSize,quantity,price,otherPlayer,player,time,source`. É venda por venda, com item,
+quantidade, preço e hora.
+
+**O erro a não repetir:** usar a média de compra do reagente no período inteiro. O 236774 do
+Light's Potential foi comprado entre 11,18o e 53,98o ao longo de 7 meses; a média (20,10o) dizia que
+o Q1 dava prejuízo de 4.262o, e o preço **da época da produção** (15,30o em 13/10) mostrou lucro de
+3.073o. Sempre casar o preço do reagente com a data da venda (a compra mais recente até aquele
+instante).
+
+Outras armadilhas da apuração:
+- **Rendimento**: `expQty` é do último scan e `yieldBy` costuma estar vazio. Dá para **medir**: se
+  num dia ele comprou 300 de dois reagentes que entram 3x, são 100 crafts exatos — divida pelas
+  unidades que chegaram (foi assim que saíram os 8,2/craft do Light's Potential).
+- **Conta 3.2.13** ("Recompensas pelo correio") não é venda: é item chegando por correio de pedido.
+- **Log próprio de vendas** (`LucroCraftDB.salesLog`) tem `qty = 0` quando o `GetInboxInvoiceInfo`
+  devolve `count` 0 — `count or 1` não cai no padrão porque **0 é verdadeiro em Lua** (regra velha
+  da casa). O `price` nesses casos é o total da carta, não o unitário.
+
 ## Lançar uma versão (o fluxo de sempre)
 1. Subir `## Version:` no `RoyalRevenue/RoyalRevenue.toc` (patch = correção, minor = funcionalidade).
 2. Rodar `./tools/check.sh` e os testes, e explicar o diff.

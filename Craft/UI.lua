@@ -10,8 +10,9 @@ ns.UI = UI
 -- IDs das abas = ordem visual (o PanelTemplates reancora as abas pela ordem do ID)
 -- a aba Histórico (vendas) foi para o addon LucroLivro (/livro vendas)
 -- (a aba Apostas saiu na v1.0.15: TAB.BETS = nil)
--- Dois grupos de abas na mesma janela (menu de cima): Craft (1-6) e Mercado (7-8). IDs na ordem visual de cada grupo.
-local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9, AUDIT = 10, SIM = 11 }
+-- Dois grupos de abas na mesma janela (menu de cima): Craft (1-6, 10-12) e Mercado (7-9).
+-- IDs na ordem visual de cada grupo.
+local TAB = { LIST = 1, PLAN = 2, INVEST = 3, SALVAGE = 4, QUEUE = 5, SETTINGS = 6, BUY = 7, SELL = 8, RECIPES = 9, AUDIT = 10, SIM = 11, ACERTO = 12 }
 local MARKET = { [7] = true, [8] = true, [9] = true }
 -- Configurações (6) não tem aba: abre pela engrenagem e mantém o grupo atual
 function UI.ModeOf(id)
@@ -983,8 +984,18 @@ local function ShowTooltip(row)
 	local sig = ent and ent.sig
 	local o, old = ns.Scanner.Observed(r.recipeID, nil, sig)
 	if o and (o.n or 0) > 0 then
-		GameTooltip:AddDoubleLine(string.format(old and L["Rendimento real (%d fabricações, perfil anterior)"] or L["Rendimento real (%d fabricações)"], o.n),
-			string.format(L["%.2f por fabricação · base %s"], o.items / o.n, tostring(r.qty)), 1, 0.82, 0, 0.4, 0.8, 1)
+		-- Dividir por o.n SUBESTIMA o rendimento: o n conta a fabricação, mas o base/items só
+		-- entram quando a saída é observada. No Light's Potential do Radunz o n diz 279 e a base
+		-- observada equivale a 269 fabricações -- aqui saía 7,43 por fabricação enquanto o cálculo
+		-- usava 7,69, e foi essa diferença que fez a apuração de lucro dar o sinal errado.
+		local qBase = r.qty or 1
+		local obs = o.n
+		if qBase > 0 and (o.base or 0) > 0 then
+			local p = o.base / qBase
+			if p >= 1 then obs = p end
+		end
+		GameTooltip:AddDoubleLine(string.format(old and L["Rendimento real (%d fabricações, perfil anterior)"] or L["Rendimento real (%d fabricações)"], math.floor(obs + 0.5)),
+			string.format(L["%.2f por fabricação · base %s"], o.items / obs, tostring(r.qty)), 1, 0.82, 0, 0.4, 0.8, 1)
 		if (o.mcN or 0) > 0 then
 			GameTooltip:AddDoubleLine(string.format(L["Multicraft observado (%d de %d)"], o.mcN, o.n),
 				string.format(L["+%.1f itens por proc"], o.mcItems / o.mcN), 1, 0.82, 0, 0.4, 0.8, 1)
@@ -1534,7 +1545,8 @@ local function Create()
 	-- abas visuais (Plano de concentração e Investimento)
 	frame.canvases = { [TAB.PLAN] = ns.Visual.Create(frame), [TAB.INVEST] = ns.Visual.Create(frame), [TAB.QUEUE] = ns.Visual.Create(frame),
 		[TAB.SALVAGE] = ns.Visual.Create(frame), [TAB.BUY] = ns.Visual.Create(frame), [TAB.SELL] = ns.Visual.Create(frame), [TAB.RECIPES] = ns.Visual.Create(frame),
-		[TAB.AUDIT] = ns.Visual.Create(frame), [TAB.SIM] = ns.Visual.Create(frame) }
+		[TAB.AUDIT] = ns.Visual.Create(frame), [TAB.SIM] = ns.Visual.Create(frame),
+		[TAB.ACERTO] = ns.Visual.Create(frame) }
 	-- a aba Fila tem a barra de botões em cima
 	-- (a barra de botões da Fila agora fica dentro da aba, em cada parte)
 
@@ -1585,8 +1597,9 @@ local function Create()
 
 	-- abas no rodapé, no estilo da janela de profissão. IDs fixos (1..6); a ordem visual é outra.
 	local TAB_LABELS = { L["Receitas"], L["Plano de concentração"], L["Investimento"], L["Destruir"], L["Fila de craft"],
-		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"], L["Auditoria"], L["Simular"] }
-	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }
+		L["Configurações"], L["Compras"], L["Vender"], L["Comprar receitas"], L["Auditoria"], L["Simular"],
+		L["Acerto"] }
+	local TAB_ORDER = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }
 	frame.Tabs = {}
 	local strip = ns.root.MakeTabStrip(frame)
 	for _, i in ipairs(TAB_ORDER) do
@@ -1638,6 +1651,7 @@ local function RenderVisual(id, resetScroll)
 		or (id == TAB.SALVAGE and ns.Salvage) or (id == TAB.BUY and ns.Buy) or (id == TAB.SELL and ns.Sell) or (id == TAB.RECIPES and ns.RecipeShop)
 		or (id == TAB.AUDIT and UI.AuditView)
 		or (id == TAB.SIM and ns.Simulate)
+		or (id == TAB.ACERTO and ns.Acerto)
 	if id == TAB.QUEUE and frame.queueBar then
 		frame.queueBar.craft:SetText(ns.Queue.NextLabel())
 		frame.queueBar.cbPlan:SetChecked(Cfg("queueIncludePlan") and true or false)
@@ -1690,14 +1704,10 @@ function UI.ShowTab(id)
 	end
 	local isList = id == 1
 	local isSettings = id == TAB.SETTINGS
-	local isHistory = id == TAB.SALES
-	local isBets = id == TAB.BETS
 	local isVisual = frame.canvases[id] ~= nil
-	if ns.History and not isHistory then ns.History.Hide() end
-	if ns.Bets and not isBets then ns.Bets.Hide() end
 	for cid, cv in pairs(frame.canvases) do if cid ~= id then cv:Hide() end end
 	for _, w in ipairs(frame.recipeWidgets) do w:SetShown(isList) end
-	frame.pane:SetShown(not isList and not isSettings and not isHistory and not isVisual and not isBets)
+	frame.pane:SetShown(not isList and not isSettings and not isVisual)
 	frame.queueBar:SetShown(false)
 	frame.pane:ClearAllPoints()
 	frame.pane:SetPoint("TOPLEFT", 12, id == TAB.QUEUE and -82 or -56)
@@ -1708,14 +1718,6 @@ function UI.ShowTab(id)
 		return
 	elseif ns.Settings then
 		ns.Settings.Hide()
-	end
-	if isHistory then
-		ns.History.Show(frame)
-		return
-	end
-	if isBets then
-		ns.Bets.Show(frame)
-		return
 	end
 	if isVisual then
 		frame.canvases[id]:Show()
@@ -1733,14 +1735,6 @@ function UI.ShowTab(id)
 end
 
 function UI.RefreshTab(id)
-	if id == TAB.SALES then
-		if frame and frame:IsShown() and frame.currentTab == id and ns.History then ns.History.Refresh() end
-		return
-	end
-	if id == TAB.BETS then
-		if frame and frame:IsShown() and frame.currentTab == id and ns.Bets then ns.Bets.Refresh() end
-		return
-	end
 	if frame and frame.canvases and frame.canvases[id] then
 		if frame:IsShown() and frame.currentTab == id then RenderVisual(id) end
 		return
@@ -1750,15 +1744,15 @@ end
 
 -- ===== Tamanho da janela =====
 local DEFAULT_HEIGHT = 128 + TOTAL_ROWS * ROW_H
-local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.AUDIT] = VISUAL_WIDTH, [TAB.SIM] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
+local DEFAULT_WIDTH = { [TAB.PLAN] = VISUAL_WIDTH, [TAB.INVEST] = VISUAL_WIDTH, [TAB.QUEUE] = VISUAL_WIDTH, [TAB.SALVAGE] = VISUAL_WIDTH, [TAB.BUY] = VISUAL_WIDTH, [TAB.SELL] = VISUAL_WIDTH, [TAB.RECIPES] = VISUAL_WIDTH, [TAB.AUDIT] = VISUAL_WIDTH, [TAB.SIM] = VISUAL_WIDTH, [TAB.ACERTO] = VISUAL_WIDTH, [TAB.SETTINGS] = SETTINGS_WIDTH }
 
 -- largura mínima de cada aba (o que precisa para não cortar nada)
 local function TabMinWidth(id)
 	if id == TAB.LIST then return UI.RequiredListWidth() end
 	if id == TAB.SETTINGS then return SETTINGS_WIDTH end
-	if id == TAB.SALES then return ns.History and ns.History.MinWidth() or 1010 end
-	if id == TAB.BETS then return ns.Bets and ns.Bets.MinWidth() or 1010 end
 	if id == TAB.QUEUE then return 700 end
+	-- a tabela do Acerto tem 9 colunas numericas: abaixo disso o nome do item entra na primeira
+	if id == TAB.ACERTO then return ns.Acerto and ns.Acerto.MIN_W or VISUAL_WIDTH end
 	return 760
 end
 
@@ -1855,10 +1849,6 @@ function UI.OnResize()
 		UI.LayoutRows()
 		UI.Layout()
 		UI.Refresh()
-	elseif id == TAB.SALES then
-		if ns.History then ns.History.Resize(); ns.History.Refresh() end
-	elseif id == TAB.BETS then
-		if ns.Bets then ns.Bets.Resize(); ns.Bets.Refresh() end
 	else
 		UI.RefreshTab(id)
 	end

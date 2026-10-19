@@ -11,6 +11,9 @@ ns.DEFAULTS = {
 	-- venda = o menor entre o preço atual (min buyout) e a média de venda na região:
 	-- evita preço "fantasma" de 1 anúncio absurdo em itens que quase não vendem (ex.: equipamento)
 	saleSource = "min(first(DBMinBuyout, DBMarket), first(DBRegionSaleAvg, DBRegionMarketAvg))",
+	-- a partir de quantas vezes o preco do seu reino acima da media da regiao deixa de ser
+	-- mercado e passa a ser anuncio solitario (vira procedencia "fraco" na Auditoria)
+	realmGapRatio = 2,
 	costSource = "first(VendorBuy, DBMarket, DBMinBuyout, DBRegionMarketAvg)",
 	outputQuality = "auto", -- "auto" = qualidade que sua skill atinge; ou força 1/2/3...
 	ahCut = 0.05,        -- corte da AH (5%)
@@ -227,6 +230,20 @@ Pricing.SANE_RATIO = 20
 -- abaixo dele. Quando o menor anúncio passa de `saleMaxOverMarket` vezes o valor de mercado do
 -- reino, a projeção usa o mercado. Medido nos dados do Uriuri, onde o DBMinBuyout batia 3,6x o
 -- DBMarket em várias peças de Couro — exatamente o "o valor vai a 1/4" que ele relatou.
+-- Razão entre o preço do SEU reino e a média da região.
+-- Acima de ~2x, o preço do reino costuma ser um anúncio solitário caro em item que não gira, e não
+-- mercado de verdade: foi o que fez a receita de encantamento da imersão contar 200k de lucro que
+-- não dava para realizar. O `BoundBySale` abaixo já limita o valor; isto existe para a Auditoria
+-- poder DIZER que o número é frágil, em vez de limitar calado.
+function Pricing.RealmGap(itemID)
+	if not itemID or not Pricing.HasTSM() then return nil end
+	local is = "i:" .. itemID
+	local reino = root.TSMPrice("first(DBMinBuyout, DBMarket)", is)
+	local regiao = root.TSMPrice("first(DBRegionSaleAvg, DBRegionMarketAvg)", is)
+	if not reino or not regiao or regiao <= 0 then return nil end
+	return reino / regiao
+end
+
 function Pricing.BoundBySale(v, ref)
 	if not v or not ref or ref <= 0 then return v end
 	local k = tonumber(ns.Cfg("saleMaxOverMarket")) or 2
@@ -535,8 +552,19 @@ function Pricing.Validate(priceStr)
 end
 
 -- Formatação: "1.234,5g" (ouro com 1 casa) — negativos em vermelho
+-- Numero que da para mostrar. Infinito e nan chegam aqui por divisao por zero em algum calculo
+-- novo, e passar isso para o GameMoneyString do jogo derruba a interface com "integer overflow
+-- attempting to store nan" (relato do Lokir no CurseForge, 19/10). Travessao e melhor que travar.
+local function Finito(n)
+	if type(n) ~= "number" then return false end
+	if n ~= n then return false end                             -- nan
+	if n == math.huge or n == -math.huge then return false end   -- +/- infinito
+	return true
+end
+Pricing.Finito = Finito
+
 function Pricing.FormatGold(copper, colorize)
-	if not copper then return "|cff808080—|r" end
+	if not Finito(copper) then return "|cff808080—|r" end
 	local neg = copper < 0
 	local g = math.abs(copper) / 10000
 	local s
@@ -550,7 +578,7 @@ function Pricing.FormatGold(copper, colorize)
 end
 
 function Pricing.FormatMoney(copper)
-	if not copper then return "—" end
+	if not Finito(copper) then return "—" end
 	local s = GetMoneyString(math.abs(math.floor(copper + 0.5)), true)
 	if copper < 0 then return "-" .. s end
 	return s

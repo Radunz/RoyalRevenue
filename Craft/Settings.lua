@@ -284,7 +284,7 @@ local function Create(parent)
 	Cycle(XR, y, L["Classes recomendadas até:"], "recoMinABC", { "B", "A", "C" }, false,
 		L["A = só itens classe A; B = A e B; C = todas."]); y = y - 26
 	Edit(XR, y, L["Mínimo das vendas da profissão (%):"], 50, "recoMinShare", "percent", false,
-		L["Item precisa ter pelo menos esta participação nas vendas/dia da profissão para ser recomendado."]); y = y - 26
+		L["Item precisa ter pelo menos esta participação nas vendas/dia da profissão para ser recomendado. Não vale para o plano de concentração enquanto \"Limitar os crafts ao que o mercado absorve\" estiver ligado: lá o teto em unidades responde a mesma pergunta direto."]); y = y - 26
 	Edit(XR, y, L["Regeneração de concentração (/h):"], 50, "concPerHour", "number", false,
 		L["Vazio = aprendida pelos seus scans (padrão ~10,5/h)."]); y = y - 26
 	Check(XR, y, L["Fila inclui o plano de concentração"], "queueIncludePlan", false,

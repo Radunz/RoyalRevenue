@@ -277,11 +277,17 @@ local function Process()
 	local RS = ns.RecipeShop
 	if RS then pcall(RS.BeginScan) end
 	Notify()
+	local aprendeuPerg = false
 	local function step()
 		local stop = math.min(n, i + 4000)
 		for idx = i, stop - 1 do
 			local iname, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID = C_AuctionHouse.GetReplicateItemInfo(idx)
 			if RS and iname and buyout and buyout > 0 and count and count > 0 then RS.OnListing(iname, itemID, buyout / count, count) end
+			-- encantamento pendente: o pergaminho se chama igual a receita, e aqui passa o anuncio
+			-- de todo item da casa de leilões, com nome e itemID
+			if iname and itemID and ns.ResolveEnchantByName and LucroCraftDB.enchantName then
+				if ns.ResolveEnchantByName(iname, itemID) then aprendeuPerg = true end
+			end
 			if itemID and rel[itemID] and buyout and buyout > 0 and count and count > 0 then
 				local unit = buyout / count
 				local a = acc[itemID]
@@ -296,6 +302,12 @@ local function Process()
 		i = stop
 		scan.i = i
 		Notify()
+		if i >= n and aprendeuPerg then
+			-- achou pergaminho de encantamento: as receitas que estavam invisiveis entram no proximo
+			-- scan da profissao, e o preco ja pode ser calculado agora
+			if ns.Scanner and ns.Scanner.RepriceAll then pcall(ns.Scanner.RepriceAll) end
+			ns.Print(L["pergaminhos de encantamento identificados pelo scan da casa de leilões."])
+		end
 		if i < n then
 			C_Timer.After(0, step)
 		else
@@ -349,15 +361,21 @@ local function RecordMail()
 	if not (GetInboxNumItems and GetInboxInvoiceInfo and GetInboxHeaderInfo) then return end
 	local log = SalesLog()
 	for i = 1, GetInboxNumItems() do
-		local invoiceType, itemName, _, bid, _, _, _, _, _, count = GetInboxInvoiceInfo(i)
+		-- o `count` e o 11o retorno, nao o 10o (o 10o e o etaMin). Lendo errado, ele vinha 0 -- e
+		-- `count or 1` NAO cai no padrao, porque 0 e verdadeiro em Lua. Resultado: toda venda ficava
+		-- com qty 0 e o `price` guardava o TOTAL da carta em vez do unitario.
+		local invoiceType, itemName, _, bid, _, _, _, _, _, _, count = GetInboxInvoiceInfo(i)
 		if invoiceType == "seller" and itemName and bid and bid > 0 then
+			local n = (type(count) == "number" and count > 0) and count or 1
 			local daysLeft = select(7, GetInboxHeaderInfo(i)) or 30
 			local received = time() - math.floor((30 - daysLeft) * 86400)
 			local bucket = math.floor(received / 10800)
-			local base = table.concat({ itemName, count or 1, bid }, "|")
+			local base = table.concat({ itemName, n, bid }, "|")
 			if not (log.seen[base .. "|" .. bucket] or log.seen[base .. "|" .. (bucket - 1)] or log.seen[base .. "|" .. (bucket + 1)]) then
 				log.seen[base .. "|" .. bucket] = received
-				table.insert(log.list, { t = received, name = itemName, qty = count or 1, price = bid / math.max(count or 1, 1), char = ns.CharKey() })
+				table.insert(log.list, { t = received, name = itemName, qty = n, price = bid / n, char = ns.CharKey() })
+				-- venda nova: a aba Acerto guarda as linhas por 60 s e passaria a mostrar dado velho
+				if ns.Acerto and ns.Acerto.Invalidate then ns.Acerto.Invalidate() end
 			end
 		end
 	end

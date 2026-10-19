@@ -48,6 +48,169 @@ local function GetCurrentExpansionProfession()
 	return best or C_TradeSkillUI.GetChildProfessionInfo()
 end
 
+-- ===== pergaminho de encantamento =====
+-- Encantamento nao produz item, produz efeito. Aplicado num Pergaminho Encantado sai um item
+-- com itemID e nome proprios -- e e esse que vai para a casa de leiloes. O jogo nao expoe esse
+-- itemID (o CraftSim guarda uma tabela a mao, e privada), entao o addon aprende:
+--   LucroCraftDB.enchantItem[recipeID] = { [qualidade] = itemID }
+function ns.EnchantItem(recipeID, q)
+	local m = LucroCraftDB and LucroCraftDB.enchantItem
+	local t = m and recipeID and m[recipeID]
+	if type(t) ~= "table" then return nil end
+	-- Tier pedido: ou tem, ou NAO tem. Cair para o mais baixo aqui era mentira perigosa -- o laco
+	-- que monta a lista de qualidades no scan nunca chegaria a nil e giraria para sempre.
+	if q then return t[q] end
+	-- sem qualidade pedida: a mais baixa conhecida, igual ao qualityItemIDs[1]
+	local melhorQ, melhorID
+	for k, v in pairs(t) do
+		if type(k) == "number" and (not melhorQ or k < melhorQ) then melhorQ, melhorID = k, v end
+	end
+	return melhorID
+end
+
+-- Encantamento que o scan viu mas cujo pergaminho ainda nao se conhece: fica anotado pelo NOME,
+-- porque o pergaminho se chama igual a receita. Assim a bolsa ou o scan da casa de leiloes
+-- resolvem depois, sem ele precisar fabricar um de cada.
+-- itemID a partir do NOME, pelo cache de itens do cliente. O `GetItemInfo` aceita nome e
+-- devolve o link; dele sai o id. Funciona para item que o cliente ja viu (anuncio, bolsa,
+-- correio, tooltip) -- que e o caso do pergaminho de quem vende encantamento.
+-- Devolve nil quando o cliente ainda nao conhece o nome; nao e erro, e so pedir de novo depois.
+-- Tier de um item FABRICADO, perguntado ao jogo. E a unica fonte confiavel: as qualidades do
+-- pergaminho sao itens diferentes com o MESMO nome, entao nome nao distingue, e deduzir pela ordem
+-- do itemID erra (na tabela do CraftSim, 7 de 103 encantamentos tem os ids fora de ordem).
+-- O TSM usa as mesmas duas APIs, nessa ordem (LibTSMWoW/Source/API/TradeSkill.lua).
+function ns.CraftedTier(itemID)
+	if not itemID or not C_TradeSkillUI then return nil end
+	for _, nome in ipairs({ "GetItemCraftedQualityByItemInfo", "GetItemReagentQualityByItemInfo" }) do
+		local f = C_TradeSkillUI[nome]
+		if f then
+			local ok, q = pcall(f, itemID)
+			if ok and type(q) == "number" and q >= 1 then return math.floor(q) end
+		end
+	end
+	return nil
+end
+
+-- Nome da receita de encantamento, guardado PARA SEMPRE (nao e apagado no primeiro acerto): e por
+-- ele que o scan da casa de leiloes continua colhendo o outro tier do pergaminho.
+function ns.NoteEnchantName(recipeID, nome)
+	if not (LucroCraftDB and recipeID and nome) then return end
+	LucroCraftDB.enchantName = LucroCraftDB.enchantName or {}
+	LucroCraftDB.enchantName[recipeID] = nome
+end
+
+-- Passa todo pergaminho ja gravado pelo jogo e move para o tier certo. Conserta o que entrou como
+-- q1 por falta de informacao. Roda no fim do RepriceAll; e uma chamada por item.
+function ns.RetierEnchants()
+	local m = LucroCraftDB and LucroCraftDB.enchantItem
+	if not m then return 0 end
+	local movidos = 0
+	for rid, t in pairs(m) do
+		if type(t) == "table" then
+			local atuais = {}
+			for k, id in pairs(t) do
+				if type(k) == "number" then table.insert(atuais, { q = k, id = id }) end
+			end
+			local novo, mexeu = {}, false
+			for _, x in ipairs(atuais) do
+				local real = ns.CraftedTier(x.id)
+				local destino = real or x.q
+				if real and real ~= x.q then mexeu = true end
+				if novo[destino] == nil then novo[destino] = x.id end
+			end
+			if next(novo) then
+				m[rid] = novo
+				if mexeu then movidos = movidos + 1 end
+			end
+		end
+	end
+	return movidos
+end
+
+function ns.ItemIDByName(nome)
+	if type(nome) ~= "string" or nome == "" then return nil end
+	local get = C_Item and C_Item.GetItemInfo
+	if not get then return nil end
+	local ok, _, link = pcall(get, nome)
+	if not ok or type(link) ~= "string" then return nil end
+	return tonumber(link:match("item:(%d+)"))
+end
+
+function ns.NoteEnchantPending(recipeID, nome)
+	-- mantido pelo nome antigo; hoje so registra o nome, que e permanente
+	ns.NoteEnchantName(recipeID, nome)
+end
+
+-- migracao: a lista antiga de pendentes vira nome permanente
+local function MigraEnchantPend()
+	local p = LucroCraftDB and LucroCraftDB.enchantPend
+	if not p then return end
+	for rid, nome in pairs(p) do ns.NoteEnchantName(rid, nome) end
+	LucroCraftDB.enchantPend = nil
+end
+
+-- Um par (nome, itemID) visto em qualquer lugar: fecha o pendente que bater pelo nome.
+-- Devolve true quando aprendeu algo (para quem chamar saber que vale reprecificar).
+-- Um par (nome, itemID) visto em qualquer lugar. Como o nome fica guardado para sempre, isto
+-- continua valendo depois do primeiro acerto -- e e assim que o segundo tier do pergaminho entra.
+function ns.ResolveEnchantByName(nome, itemID)
+	if not (nome and itemID and itemID ~= 0) then return false end
+	local mapa = LucroCraftDB and LucroCraftDB.enchantName
+	if not mapa then return false end
+	local achou = false
+	for rid, n in pairs(mapa) do
+		if n == nome then
+			if ns.LearnEnchantItem(rid, itemID) then achou = true end
+		end
+	end
+	return achou
+end
+
+-- Passa a lista de pendentes pelo cache de itens. Roda no fim do RepriceAll (login, depois que o
+-- TSM carrega), para quem ja tinha pendente nao precisar reabrir a profissao.
+function ns.ResolvePendingEnchants()
+	MigraEnchantPend()
+	local mapa = LucroCraftDB and LucroCraftDB.enchantName
+	if not mapa then return 0 end
+	local n = 0
+	for rid, nome in pairs(mapa) do
+		if not ns.EnchantItem(rid) then
+			local id = ns.ItemIDByName(nome)
+			if id and ns.LearnEnchantItem(rid, id) then n = n + 1 end
+		end
+	end
+	return n
+end
+
+function ns.LearnEnchantItem(recipeID, itemID, q)
+	if not (LucroCraftDB and recipeID and itemID and itemID ~= 0) then return false end
+	LucroCraftDB.enchantItem = LucroCraftDB.enchantItem or {}
+	local m = LucroCraftDB.enchantItem
+	if type(m[recipeID]) ~= "table" then m[recipeID] = {} end
+	-- sem tier explicito, PERGUNTA ao jogo antes de assumir q1: assumir era o que fazia os 44
+	-- pergaminhos do Rafael entrarem todos no tier 1 e aparecerem com prejuizo
+	local k = q
+	if type(k) ~= "number" or k < 1 then k = ns.CraftedTier(itemID) end
+	if type(k) ~= "number" or k < 1 then k = 1 end
+	if m[recipeID][k] == itemID then return false end
+	m[recipeID][k] = itemID
+	return true
+end
+
+-- nome -> itemID do que esta nas bolsas, uma vez por scan (o BagCounts ja e cacheado por quadro)
+local bagNames, bagNamesAt
+local function BagNames()
+	if bagNames and bagNamesAt == (GetTime and GetTime() or 0) then return bagNames end
+	local out = {}
+	for id in pairs((root.BagCounts and root.BagCounts()) or {}) do
+		local n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+		if n and not out[n] then out[n] = id end
+	end
+	bagNames, bagNamesAt = out, GetTime and GetTime() or 0
+	return out
+end
+function ns.ResetBagNames() bagNames, bagNamesAt = nil, nil end
+
 local function GetOutputItemID(recipeID, info, schematic)
 	if info.qualityItemIDs and #info.qualityItemIDs > 0 then
 		return info.qualityItemIDs[1]
@@ -57,7 +220,8 @@ local function GetOutputItemID(recipeID, info, schematic)
 		local ok, data = pcall(C_TradeSkillUI.GetRecipeOutputItemData, recipeID, {}, nil)
 		if ok and data and data.itemID then return data.itemID end
 	end
-	return nil
+	-- encantamento: o item e o pergaminho, que o addon aprendeu fabricando ou pelo nome na bolsa
+	return ns.EnchantItem(recipeID)
 end
 
 -- Simula o craft com os reagentes escolhidos (os mais baratos) e devolve a info de operação:
@@ -571,7 +735,25 @@ function ns.Provenance(r, campo)
 			}
 		end
 		if not r.sale and not r.concSale then return nil end
-		return { fonte = P.SourceName and P.SourceName() or "?", nivel = "firme" }
+		local fonte = P.SourceName and P.SourceName() or "?"
+		-- Encantamento com so um tier de pergaminho conhecido: o preco e de UM tier e o custo e do
+		-- craft inteiro, entao o lucro sai torto -- e para baixo. Dizer isso e melhor que mostrar
+		-- um prejuizo com cara de certeza. (Foi o que escondeu as receitas nao aprendidas da lista:
+		-- o terceiro grupo so mostra desconhecida com lucro positivo.)
+		if r.recipeID and ns.EnchantItem and ns.EnchantItem(r.recipeID)
+			and (r.maxQuality or 0) > 1 and not ns.EnchantItem(r.recipeID, 2) then
+			return { fonte = fonte, nivel = "fraco",
+				nota = L["só uma qualidade do pergaminho é conhecida: o lucro está incompleto"] }
+		end
+		-- preço do reino muito acima da região é anúncio solitário, não mercado: o valor já vem
+		-- limitado pelo BoundBySale, mas limitar calado não avisa que o número é frágil
+		local id = (campo == "sale") and r.itemID or r.concItemID
+		local raz = id and P.RealmGap and P.RealmGap(id)
+		if raz and raz >= (tonumber(ns.Cfg("realmGapRatio")) or 2) then
+			return { fonte = fonte, nivel = "fraco",
+				nota = string.format(L["seu reino está %.1fx a região: provável anúncio solitário"], raz) }
+		end
+		return { fonte = fonte, nivel = "firme" }
 	end
 	if campo == "spd" or campo == "concSpd" then
 		local projetado = (campo == "spd") and r.spdProjected or r.concProjected
@@ -727,7 +909,9 @@ end
 -- Concentração efetiva considerando ingenuity
 -- refund = concentração devolvida no proc (vem do jogo em op.ingenuityRefund); sem ele usa 50%
 local function EffectiveConc(conc, st, refund)
-	if not conc then return nil end
+	-- `not conc` nao pegava o zero (0 e verdadeiro em Lua) e o zero voltava inteiro pela linha de
+	-- baixo, virando denominador. Sem concentracao gasta nao existe custo efetivo: nil.
+	if not conc or conc <= 0 then return nil end
 	if not Cfg("useStats") or not st or st.ing <= 0 then return conc end
 	refund = refund or conc * ING_REFUND
 	return math.max(conc - st.ing * refund, 1)
@@ -770,10 +954,19 @@ local function ComputeProfit(r)
 		if r.expCost > 0 then r.margin = r.profit / r.expCost end
 	end
 	r.concProfit, r.perConc, r.concEff, r.concBeaten = nil, nil, nil, nil
-	if r.concCost and r.concSale then
+	r.concFree = nil
+	if r.concCost and r.concCost > 0 and r.concSale then
 		r.concEff = EffectiveConc(r.concCost, st, r.ingRefund)
 		r.concProfit = ns.NetProfit(r.concSaleProj, r.expQty, r.expCost, ahCut)
-		r.perConc = r.concProfit / r.concEff
+		-- guarda a divisão: concEff zerado dava infinito, e o infinito estourava o GetMoneyString
+		-- do jogo ("integer overflow attempting to store nan", relato do Lokir no CurseForge)
+		if r.concEff and r.concEff > 0 then r.perConc = r.concProfit / r.concEff end
+	elseif r.concSale and r.concCost == 0 then
+		-- A qualidade de cima sai SEM gastar concentração. Isto nunca foi jogada de concentração:
+		-- é craft normal numa qualidade melhor, e "ouro por ponto" não existe (era a divisão por
+		-- zero). `0` passava na guarda antiga porque 0 é VERDADEIRO em Lua.
+		r.concProfit = ns.NetProfit(r.concSaleProj, r.expQty, r.expCost, ahCut)
+		r.concFree = true
 	end
 	-- qualidade de cima com reagentes melhores (sem concentração)
 	r.mixCost, r.mixExpCost, r.mixProfit = nil, nil, nil
@@ -1134,6 +1327,15 @@ function Scanner.RepriceAll(onDone)
 		local job = jobs[i]
 		if not job then
 			repricing = false
+			-- pergaminho de encantamento que faltava: o cache de itens costuma estar quente aqui
+			local okP, nP = pcall(ns.ResolvePendingEnchants)
+			if okP and (nP or 0) > 0 then
+				ns.Log(string.format(L["%d pergaminho(s) de encantamento identificado(s) pelo nome."], nP))
+			end
+			local okT, nT = pcall(ns.RetierEnchants)
+			if okT and (nT or 0) > 0 then
+				ns.Log(string.format(L["%d pergaminho(s) movido(s) para a qualidade certa."], nT))
+			end
 			if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
 			if onDone then onDone() end
 			return
@@ -1171,6 +1373,65 @@ local function CollectRows(targetID, unknown)
 				end
 				local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeID, false)
 				local itemID = schematic and GetOutputItemID(recipeID, info, schematic)
+				-- encantamento ainda sem pergaminho conhecido: o item se chama igual a receita, entao
+				-- um item na bolsa com o mesmo nome resolve sem precisar fabricar
+				if not itemID and info.isEnchantingRecipe and info.name then
+					-- 1a tentativa, a unica DEFINITIVA quanto a qualidade: esta API devolve um itemID
+					-- por tier. O CraftSim nao a usa para encantamento (resolve pela tabela a mao),
+					-- mas tentar e de graca -- e se o jogo responder, sai q1/q2/q3 certos de uma vez.
+					local okQI, qids = pcall(C_TradeSkillUI.GetRecipeQualityItemIDs, recipeID)
+					if okQI and type(qids) == "table" and #qids > 0 then
+						for q, id in ipairs(qids) do ns.LearnEnchantItem(recipeID, id, q) end
+						itemID = qids[1]
+					end
+					-- 2a tentativa definitiva: a MESMA API do equipamento, com a qualidade FORCADA.
+					-- O addon ja a usa assim no OutLinkAt; para encantamento nunca foi tentada,
+					-- porque o GetOutputItemID chama sem qualidade (e sem qualidade ela nao responde).
+					-- So faz o trabalho se ainda falta tier: scan repetido nao paga as chamadas.
+					if not itemID or not ns.EnchantItem(recipeID, 2) then
+						local maxQ = tonumber(info.maxQuality) or 0
+						if maxQ < 2 then maxQ = 2 end
+						if maxQ > 5 then maxQ = 5 end
+						local achados, distintos, nd = {}, {}, 0
+						for q = 1, maxQ do
+							local okO, od = pcall(C_TradeSkillUI.GetRecipeOutputItemData, recipeID, {}, nil, q)
+							local oid = okO and od and od.itemID
+							if oid and oid ~= 0 then
+								achados[q] = oid
+								if not distintos[oid] then distintos[oid] = true; nd = nd + 1 end
+							end
+						end
+						if nd > 1 then
+							-- tiers com itens DIFERENTES: a qualidade vem da propria consulta
+							for q, oid in pairs(achados) do ns.LearnEnchantItem(recipeID, oid, q) end
+							itemID = itemID or achados[1] or ns.EnchantItem(recipeID)
+						elseif nd == 1 and not itemID then
+							-- um id so para todas as qualidades: nao diz o tier, entao deixa o jogo dizer
+							for _, oid in pairs(achados) do ns.LearnEnchantItem(recipeID, oid); break end
+							itemID = ns.EnchantItem(recipeID)
+						end
+					end
+					-- Se a API nao respondeu, resolve pelo NOME: o pergaminho se chama igual a receita.
+					-- Primeiro o cache de itens do cliente, depois a bolsa.
+					-- ATENCAO: por nome nao da para saber a qualidade (as tres se chamam igual), entao
+					-- isto entra como q1 e pode nao ser o tier de verdade. Nao da para deduzir pela
+					-- ordem do itemID: na tabela do CraftSim, 7 de 103 encantamentos tem os ids fora
+					-- de ordem, e inverter q1 com q3 num calculo de lucro e pior que nao mostrar.
+					if not itemID then
+						local achado = ns.ItemIDByName(info.name)
+						if not achado then
+							local porNome = BagNames()
+							achado = porNome and porNome[info.name]
+						end
+						if achado then
+							ns.LearnEnchantItem(recipeID, achado)
+							itemID = achado
+						end
+					end
+					-- o nome fica guardado de qualquer jeito: o scan da casa de leiloes precisa dele
+					-- para achar o OUTRO tier depois
+					ns.NoteEnchantName(recipeID, info.name)
+				end
 				if not itemID then
 					skipped = skipped + 1
 				else
@@ -1184,6 +1445,20 @@ local function CollectRows(targetID, unknown)
 
 					-- Qualidade: "auto" usa a que sua skill atinge com os reagentes mais baratos
 					local qIDs = info.qualityItemIDs
+					-- Encantamento: cada qualidade do pergaminho e um itemID diferente, e o jogo nao
+					-- devolve a lista (o qualityItemIDs vem nil). O addon monta a lista com o que
+					-- aprendeu, e so quando tem a sequencia COMPLETA a partir do tier 1 -- com buraco
+					-- no meio o #qIDs mentiria e a qualidade sairia trocada.
+					if (not qIDs or #qIDs == 0) and info.isEnchantingRecipe and ns.EnchantItem then
+						local montada, q = {}, 1
+						while true do
+							local id = ns.EnchantItem(recipeID, q)
+							if not id then break end
+							montada[q] = id
+							q = q + 1
+						end
+						if #montada > 1 then qIDs = montada end
+					end
 					local hasQIDs = qIDs and #qIDs > 0
 					-- equipamento: o mesmo itemID em todas as qualidades (a qualidade muda o item level)
 					local maxQ = hasQIDs and #qIDs
@@ -1620,6 +1895,16 @@ yf:SetScript("OnEvent", function(_, event, a1)
 	if not ok or not info or info.isSalvageRecipe or info.isRecraft then return end
 	local data = a1
 	local okD, id, qty, mc, enchant = pcall(function() return data.itemID, data.quantity, data.multicraft, data.isEnchant end)
+	-- Encantamento aplicado num pergaminho: o `id` que chega aqui E o item do pergaminho, o unico
+	-- lugar em que o jogo entrega esse numero. Antes a linha abaixo descartava e a receita ficava
+	-- invisivel para sempre. (O rendimento segue fora: encantamento nao tem multicraft.)
+	if okD and enchant and id and id ~= 0 then
+		local okQ, q = pcall(function() return data.craftingQuality end)
+		if ns.LearnEnchantItem(yieldRecipe, id, okQ and q or nil) then
+			if ns.Scanner and ns.Scanner.Reprice then ns.Scanner.gen = (ns.Scanner.gen or 0) + 1 end
+			ns.Log(string.format(L["pergaminho aprendido: receita %d -> item %d"], yieldRecipe, id))
+		end
+	end
 	if not okD or enchant or type(qty) ~= "number" or qty <= 0 or not id or id == 0 then return end
 	mc = (type(mc) == "number" and mc > 0) and mc or 0
 	local Y = CharY(ns.CharKey())

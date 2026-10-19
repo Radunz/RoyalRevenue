@@ -39,6 +39,8 @@ end
 -- ===== Cache de preço do TSM / Auctionator =====
 -- A mesma tela pede o mesmo preço muitas vezes (custo, venda, tendência...). O valor fica guardado por 60 s.
 local pc, pcT = {}, 0
+-- ponta de teste: o preço é guardado por 60 s, e o TSM simulado precisa que o cache saia da frente
+function root._ResetPriceCache() pc, pcT = {}, 0 end
 local function PriceCacheGet(k)
 	local now = GetTime and GetTime() or 0
 	if now - pcT > 60 then pc, pcT = {}, now end

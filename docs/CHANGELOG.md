@@ -1537,3 +1537,434 @@ Reagents) e **uma coluna em português: "Qualidade"**.
   barato" quando o mais barato não rende nada é conversa estranha. Agora, nesse caso, a linha diz
   que **o mais barato não cabe na sua concentração**, quanto ele pede e quanto você tem.
 - Teste: t126.lua ganhou o cenário de concentração insuficiente (o do print).
+
+## v1.40.0 — a aba Acerto (previsto x realizado) e o TSM simulado nos testes
+Duas das melhorias que o Rafael aprovou ("implemente o 1, e 2"), e a limpeza da 6.
+
+### 1. Aba Acerto: o addon prevê lucro o tempo todo, e nada conferia se deu certo
+Esta era a lacuna mais feia do addon. Três correções de preço saíram com **zero** diferença na
+suíte, e um lucro de 200k do Uriuri era preço de outro reino — nos dois casos, a previsão e o
+realizado nunca se encontravam em lugar nenhum da tela.
+
+O motor da comparação **já existia** em `Craft/Sales.lua` desde que a aba Vendas foi para o Livro:
+`Sales.GetRows()` calcula previsto, obtido, erro e lucro realizado por receita, e **ninguém o
+chamava**. Faltava a tela.
+
+- **`Craft/Acerto.lua`** (novo, aba 12 do grupo Craft). Para cada item que você **vendeu de fato**
+  na janela (`salesDays`, 14 por padrão):
+  - `previsto` = o `r.sale` que a aba Receitas usou para calcular o lucro;
+  - `obtido` = a média do que a venda rendeu (TSM Accounting, ou o correio da AH sem TSM);
+  - `erro` = obtido / previsto - 1, com cor (verde até 10%, amarelo até 30%, vermelho acima);
+  - **`impacto`** = quantidade x (obtido - previsto) x (1 - comissão). É a coluna que importa e a
+    ordenação padrão: 300% de erro em 1 item vendido é ruído, 20% em 400 itens é dinheiro.
+- **O veredito no cabeçalho é o erro ponderado pelo volume**, não a média dos erros soltos. Na
+  fixture do teste os dois dão respostas opostas (-35,15% ponderado contra +12,85% de média solta):
+  a média solta deixa o item de 1 venda pesar igual ao de 400.
+- Agrupado por personagem, grupos minimizáveis, linhas zebradas, clique na linha abre a receita na
+  janela da profissão. Erro e impacto ordenam **pelo módulo**: errar 40% para baixo interessa tanto
+  quanto 40% para cima.
+- Separa "vendido sem previsão guardada" do resto e diz quantos são, em vez de misturar na conta.
+
+### 2. TSM simulado no harness: os caminhos de preço passaram a ser testados
+As três correções de preço citadas acima não saíram com zero diferença porque estivessem certas:
+**sem TSM o `root.TSMPrice` devolve nil e o caminho inteiro nunca roda**. "Só dá para ver no jogo"
+é lacuna, não característica.
+
+- **`tests/tsmstub.lua`** (novo): interpreta a linguagem de preço do TSM (`first()`, `min()`,
+  `max()`, `fonte * N`, nome de fonte) com preços tirados do que **o próprio addon já gravou** em
+  `r.audit.prices` — ou seja, preços de um TSM de verdade, não inventados.
+- **`tests/t128.lua`** (novo) exercita o que antes não rodava: o `min(reino, região)` do Livro
+  (v1.38.3, o caso da imersão: 167.865g no reino contra 42.000g na região), o teto do anúncio fora
+  do mercado (v1.38.3, o couro do Uriuri a 3,7x o mercado) e o teto do `saleSource`. Com o stub,
+  **755 das 965 receitas da fixture passam a ter preço de venda** nos testes.
+- `root._ResetPriceCache()` em `Brand.lua`: o preço fica guardado por 60 s e o `GetTime` do harness
+  quase não anda, então trocar um preço no meio do teste exigia zerar o cache. Conferido que é
+  necessário, não enfeite: rodando o t128 contra a v1.39.4, o segundo preço volta o primeiro e o
+  teste **falha**.
+
+### 6. Limpeza: as abas Histórico e Apostas
+`TAB.SALES` e `TAB.BETS` são `nil` desde que as telas saíram (a de vendas foi para o Livro, a de
+apostas na v1.0.15), e `ns.History` / `ns.Bets` não existem como módulo. `id == nil` nunca é
+verdade, então eram 14 linhas em 5 lugares do `UI.lua` que não rodavam nunca — inclusive dentro do
+`SetShown` do painel de texto. Foram embora.
+
+### Testes
+- **t129.lua** (novo): injeta vendas com erro **conhecido** (o item vendeu a 80%, 150%, 40%, 220%
+  do previsto) e cobra os números de volta — erro, impacto, erro ponderado, ordenação pelo módulo,
+  o item não fabricável ficando fora da tabela, o grupo fechando e abrindo, e a tela sem venda
+  nenhuma. Foi ele que achou que abaixo de 952px o nome do item entrava na coluna Vend. (a mesma
+  classe de defeito da v1.35.1): a aba passou a declarar `MIN_W`, e o `UI.TabMinWidth` devolve isso.
+- Diff da suíte: 5 arquivos, todos esperados — t110 e t124 ganham a aba nova na varredura de
+  geometria (0 widgets fora do canvas), t128 e t129 são os testes novos, e o t74 difere só no
+  prefixo do caminho do baseline.
+- A dica de cada coluna chega ao `Head` **já traduzida**, em vez de como chave: rótulo passado por
+  variável é exatamente o ponto cego que levou "Qualidade" em português para a tela em inglês.
+
+### 4. Agenda de cargas: carga parada é carga perdida
+A v1.37.3 fez a carga **limitar** o plano de concentração, mas nada dizia que havia carga parada no
+máximo. Carga volta ~1/dia e **não acumula além do teto**: quem está cheio joga uma carga fora por
+dia. É o mesmo desperdício da barra de concentração cheia, que já era avisado no login desde sempre.
+
+- **`Plan.Cargas()`** e o bloco **Agenda de cargas** no fim da aba Plano: receita, personagem,
+  cargas agora, quando nasce a próxima, lucro por carga e o total gastando as de agora. Clique abre
+  a receita na janela da profissão.
+- **Ordena pelo lucro por carga, não por "está cheia".** Ordenar pelo cheio parecia certo e estava
+  errado: nos dados reais enterrava a melhor receita (Sunfire Silk Bolt, 40,10o por carga, em 27/30)
+  embaixo de quatro transmutações cheias e **todas dando prejuízo**. A urgência do cheio aparece no
+  destaque vermelho da linha; a ordem responde "onde gasto a carga".
+- **O aviso conta só o que vale gastar.** Dos 20 encargos cheios da conta do Rafael, 18 são
+  transmutações com lucro negativo pelo preço de hoje — não craftar essas é a decisão certa, não
+  desperdício. Avisar sobre 20 cargas viraria um alarme que se aprende a ignorar; o aviso diz 2.
+- **Piso de 1o por carga** (`Plan.CARGA_PISO`) no aviso, não na tabela. O Arcanoweave Bolt fica
+  30/30 a 0,79o por carga: tecnicamente é ouro parado, na prática ninguém loga para fazer 30 crafts
+  de 0,79o. Na tabela ele continua, porque lá você foi olhar de propósito.
+- Baú cujo conteúdo o addon ainda não aprendeu aparece com **"sem preço"** e fora da conta, em vez
+  de 0 parecendo "não vale".
+- Teste: **t130.lua**.
+
+### 5. Aba Reinos: onde o item vale mais, e quando o preço do seu reino está mentindo
+A receita de encantamento que o Uriuri pegou numa imersão contou **200k de lucro** que não dava para
+realizar: no Goldrinn ninguém pagava aquilo e em outro reino caía a 1/4. A v1.38.3 passou a
+**limitar** o preço (min(reino, região) no Livro, teto do anúncio fora do mercado) — mas limitar é
+remendo. O `min()` devolvia o menor e pronto, **sem nunca dizer que os dois lados estavam a 4x de
+distância**.
+
+- **`Craft/Realms.lua`** (nova aba, no grupo Mercado). Duas coisas:
+  1. compara o preço do **seu reino** com a média da **região**, agora, e marca o que está fora.
+     Reino muito acima da região costuma ser um anúncio solitário caro, não mercado — vermelho.
+     Muito abaixo é lugar bom de comprar — azul;
+  2. **guarda o preço de cada reino em que você loga** (`RoyalRevenueDB.realms`, que é da conta
+     inteira), para "no Medivh isso valia o dobro" deixar de ser palpite. O retrato é gravado no fim
+     do `RepriceAll`, que já roda no login depois do TSM carregar: enche sozinho conforme ele joga
+     os alts de Medivh, Illidan, Stormrage e Azralon.
+- **Razão alta sozinha não basta:** tem piso em ouro (`realmGapMin`, 50o). 4x num item de 4o é 3o de
+  diferença, não notícia. Ajustes: `realmGapRatio` (2x) e `realmGapMin`.
+- **Defeito achado ao escrever o teste:** a tela usava `r.name` e `r.quality` da linha da receita
+  para as três variantes (normal, concentração, mix). Mas `r.name` é o nome da **receita** e
+  `r.quality` é a da variante normal — o item do mix saía com o nome e a estrela errados. É a mesma
+  classe do acessório 2 do Saalla. Agora cada variante leva o seu (`itemID` → `quality`,
+  `concItemID` → `concQuality`, `mix.itemID` → `mix.quality`), como o `Sales.RecipeMap` já fazia.
+- Teste: **t131.lua**, com o par de números do bug real (167.865o no reino contra 42.000o na região).
+
+### 6. Limpeza
+- **`recoMinShare` não era vestigial** — era mal explicado. Ele filtra a lista de receitas (caminho
+  sem concentração) e continua fazendo sentido lá: é "não recomende o que não gira". O que estava
+  errado é a configuração não contar que ela é **ignorada no plano de concentração** enquanto
+  "Limitar os crafts ao que o mercado absorve" está ligado (onde o teto em unidades responde a mesma
+  pergunta direto). A dica da configuração agora diz isso.
+- **`Sales.Refresh()`**: função vazia, zero chamadores desde que a tela de vendas foi para o Livro.
+  Removida.
+- **`ns.Acerto.Invalidate()`** passou a ser chamada de verdade, quando o correio registra uma venda
+  nova — senão a aba Acerto ficaria até 60 s mostrando o número velho logo depois de uma venda.
+- Varredura de funções públicas sem chamador: sobraram 3, e as 3 são ganchos de teste deliberados
+  (`_ResetCharKey` x2, `_ResetPriceCache`).
+
+### Diff da suíte (10 arquivos, todos esperados)
+- **t110, t124**: as duas abas novas entram na varredura de geometria e o bloco de cargas engorda a
+  aba Plano (247 → 433 widgets) — **0 widgets fora do canvas** em todas.
+- **t128, t129, t130, t131**: os testes novos (falham na v1.39.4 por falta dos módulos, como esperado).
+- **t90, t91, t92**: o aviso novo de cargas paradas no login, mais jitter de milissegundos.
+- **t74**: difere só no prefixo do caminho do baseline.
+
+### 7. Correio de pedido de fabricação: quem encomendou não teve receita
+Achado investigando o Light's Potential nos dados reais, a pedido do Rafael.
+
+O Livro lançava **todo** item que chega por correio de pedido como receita ("Recompensas pelo
+correio", conta 3.2.13). Mas são dois casos opostos:
+
+- **você fabricou para alguém**: a comissão e a recompensa são receita de verdade;
+- **você encomendou**: o item que chega é produção que *você pagou* (reagente + comissão da ordem).
+  Lançar como receita conta **duas vezes**, porque a venda na casa de leilões vem depois.
+
+Na conta do Rafael isso deu **19.005,74o de receita fantasma só no Light's Potential**: 1.487
+unidades que ele encomendou nos próprios alts (pagou 25,02o de taxa de pedido em 13/10 e comprou
+5.766,00o de reagente no mesmo dia).
+
+- **O jogo distingue, e agora o addon usa isso.** `C_Mail.GetCraftingOrderMailInfo(i)` devolve
+  `crafterName` quando a outra parte é o fabricante (logo o cliente sou eu) e `customerName` quando
+  a outra parte é o cliente (logo fabriquei eu). Confirmado contra o
+  `LibTSMWoW/Source/API/Inbox.lua` do TSM, que lê os mesmos campos.
+- Item de pedido **que eu encomendei** passa a ser **conversão** (`Ledger.ItemConv`, conta 5.3.02,
+  valor 0 e valor de mercado só informativo em `e.x`) — a mesma vala do Desencantar, que existe
+  justamente para "o material chegou mas não é receita nova".
+- **Pedido que não se completou** (`reason ~= RcoCloseFulfill`) devolve material próprio: também
+  conversão, não receita.
+- Sem a API (cliente antigo), cai no comportamento de antes sem erro.
+
+**Leilão que não vendeu já estava certo.** O Rafael lembrou que venda que falha devolve o item pelo
+correio; conferido que isso nunca virou receita — correio da casa de leilões não casa com nenhuma
+palavra do `ORDER_WORDS`, e o caminho de item do correio sai antes de lançar ("compras, correio,
+trocas e bancos não são ganho de atividade"). O teste fixa esse caso para não regredir.
+
+- Teste: **t132.lua**, com os seis casos (encomendei, fabriquei, pedido expirado, leilão devolvido,
+  sem a API, e o efeito no DRE). Precisou stubar o correio e os globais de mensagem de loot, que o
+  harness não tinha — o `Ledger.BuildPatterns` montava lista vazia e nenhuma mensagem casava.
+
+**Dado histórico não foi mexido.** Dos 57.232,18o lançados em 3.2.13 como receita de item,
+**26.718,00o** (37 lançamentos) são de itens que a conta sabe fabricar — candidatos a receita
+fantasma. Mas parte pode ser recompensa legítima de pedido de NPC (o `Transmute: Mote of Light`, com
+4.004 unidades, tem cara disso), e o lançamento salvo não guarda de que lado do pedido ele veio.
+Uma correção única (`Ledger.MoveEntry(c, e, nil, nil, hist)` já reclassifica e acerta os totais do
+dia) fica à espera da decisão do Rafael, porque mexe no livro-caixa dele.
+
+### 8. O `count` da venda no correio estava na posição errada (achado na mesma apuração)
+As 13 vendas de Light's Potential no log próprio do addon estavam **todas com `qty = 0`**, e o
+`price` guardava o total da carta em vez do preço unitário.
+
+- **Causa:** `Own.lua` lia `count` como o **10º** retorno de `GetInboxInvoiceInfo`, e ele é o **11º**
+  — o 10º é `etaMin`, que vem 0. Conferido contra o `LibTSMWoW/Source/API/Inbox.lua`, que lista a
+  ordem completa (`invoiceType, itemName, playerName, bid, buyout, deposit, consignment, _,
+  etaHour, etaMin, count`).
+- **E o 0 passou batido** porque `count or 1` não cai no padrão quando `count` é 0: **0 é verdadeiro
+  em Lua**. É a regra 2 do CLAUDE.md pegando de novo, no mesmo lugar onde já pegou no ajuste do
+  Livro. Agora a guarda é explícita (`count > 0`).
+- Importa porque é o caminho **sem TSM Accounting**: é dele que a nova aba Acerto tira as vendas
+  quando o TSM não está instalado, e com `qty = 0` ela compararia quantidade nenhuma.
+- Teste: t132.lua, blocos 7 (200 unidades por 247o -> 1,24o/unidade) e 7b (carta sem `count` cai no 1).
+
+### 9. "Rendimento real" subestimava — e isso trocou o sinal de uma apuração de lucro
+Saiu da pergunta do Rafael: "o multicraft dessa poção chegou a sair 20 unidades com o custo de 1
+craft, considerando isso precisamos alterar algo?". Precisava, mas não era onde parecia.
+
+- **O modelo de multicraft está certo e não foi mexido.** Conferido contra as 279 fabricações dele
+  do Light's Potential: o addon usa 34,64% de chance de proc, o medido deu **34,77%** — 0,05 desvio
+  padrão. O `ExtraPerProc` já come o extra medido por proc (7,76), então a parte do cálculo que
+  importa já vinha dos dados dele. As 20 unidades que ele lembra são cauda: o multicraft proca em
+  ~1 de cada 3 fabricações e, quando proca, soma ~7,8 — nos outros dois terços sai a base e pronto.
+- **O defeito estava na exibição.** O tooltip da receita mostrava `o.items / o.n`, mas o `n` conta a
+  fabricação e o `base`/`items` só entram quando a **saída é observada**. No dado dele o `n` diz 279
+  e a base observada equivale a 269 fabricações: o tooltip anunciava **7,43 por fabricação** enquanto
+  o cálculo usava **7,69**.
+- Agora normaliza pela base observada (`items / (base / qty)`) e a contagem mostrada é a de
+  fabricações com saída observada, não o `n` cru.
+- **Por que isso não é cosmético:** numa margem de ~0,5o por unidade, 3,5% de rendimento é metade do
+  lucro. Foi essa diferença que fez a apuração do Q1 do Light's Potential parecer prejuízo. Medido
+  no dado da fixture: 7,37 → custo 11,23o/un → margem +0,50o/un; normalizado 7,72 → custo 10,73o/un
+  → margem +1,01o/un. Em 1.600 unidades, a diferença entre 801o e 1.609o.
+- Teste: **t133.lua** — valida o modelo de proc contra as fabricações registradas (e documenta que
+  ele está certo, para ninguém "consertar" o que funciona) e cobra a normalização. O valor absoluto
+  não entra na asserção porque muda com a fixture; o que se cobra é a relação.
+
+### 10. A aba Reinos saiu (o Rafael estava certo), e o que ela queria dizer foi para a Auditoria
+Feedback dele depois de abrir a aba: "todos os itens ali são craftados, todos super inflados e com
+vendas beirando a inexistência; não vejo uso a não ser ver o que não vai me dar lucro".
+
+Medido no dado dele, e ele tem razão — o problema é a **premissa**, não o acabamento:
+
+- a aba marcava **156 de 558** itens; **73% deles vendem menos de 1/dia** (na população geral são
+  24%). Só 5% passam de 10/dia, contra 60% da população;
+- dos 156 marcados, ele vendeu **exatamente zero**;
+- o maior da lista, `Junker's Multitool`, tinha razão de **389x** e gira **0,04/dia**. Depois dele:
+  `Hobbyist Rolling Pin` 59x a 0,23/dia, `Hobbyist Scribe's Quill` 97x a 0,08/dia.
+
+A razão é circular: **preço divergente é causado por falta de liquidez.** Um anúncio solitário caro
+num item morto. Filtrar por divergência é filtrar pelo sintoma de "não tem mercado", e a aba virou
+uma lista do que não dá para vender. Somando: o que ele de fato vende é commodity (poção, tecido),
+e commodity negocia na casa de leilões da **região inteira** — não existe diferença de reino para
+explorar ali. O que sobrava na lista era equipamento, ferramenta de profissão e decoração, que é
+justamente o que não gira.
+
+**O que motivou a aba era real** (a receita de encantamento da imersão, com 200k de lucro
+irrealizável), e isso fica — no lugar certo:
+
+- **`Pricing.RealmGap(itemID)`**: razão entre o preço do seu reino e a média da região.
+- **`ns.Provenance`** passa a devolver `nivel = "fraco"` para a venda quando a razão passa de
+  `realmGapRatio` (2x), com a nota "seu reino está N,Nx a região: provável anúncio solitário". Isso
+  aparece na **Auditoria**, em "Procedência dos números", para a receita que ele está olhando —
+  onde ele já vai conferir de onde veio o número, em vez de uma aba com 156 itens mortos.
+- O addon **já limitava** o preço nesse caso (`BoundBySale`, v1.38.3). O que faltava era *dizer* que
+  o número é frágil, em vez de limitar calado.
+
+Saíram: `Craft/Realms.lua`, a aba 13, o gancho que gravava o retrato de preço de cada reino no
+`RepriceAll` (ninguém mais lê, e eram ~558 itens por reino no SavedVariables), o `realmGapMin` e as
+19 chaves de tradução da aba. `realmGapRatio` ficou, agora com emprego.
+
+- Teste: **t131.lua** reescrito — confere que a aba não existe mais, o `RealmGap` nos quatro casos
+  (incluindo os números reais da imersão), a procedência virando "fraco" só acima do limiar, o
+  limiar configurável, o comportamento sem TSM, e a Auditoria desenhando com o aviso.
+
+### 11. Encantamento não existia para o addon (print/relato do Rafael)
+"No enchant, quando se quer vender na AH usamos um material e pronto, temos um enchant para vender;
+só que o addon não reconhece porque o nome e o ID mudam."
+
+- **Causa:** encantamento não produz item, produz um efeito. Para vender, aplica-se num **Pergaminho
+  Encantado** e aí sai um item, com `itemID` e nome próprios. O `GetOutputItemID` não achava saída
+  nenhuma e o scan descartava a receita inteira (`if not itemID then skipped = skipped + 1`).
+- **Medido no SavedVariables real:** das 36 receitas de Encantamento do Radünz-Medivh, **zero** eram
+  encantamento. Só varas, óleos, ilusões, Gleeful Glamours e brinquedos — exatamente o que já
+  produz item. Toda a parte que dá dinheiro estava invisível.
+- **O jogo não expõe esse itemID.** O CraftSim resolve com uma tabela mantida à mão
+  (`ENCHANT_RECIPE_DATA[craftingDataID] = { q1, q2, q3 }`), e ela é privada (`select(2, ...)`): não
+  dá para ler de outro addon. Então o addon **aprende**, que é o padrão da casa (Containers aprende
+  o baú, Salvage aprende a saída, `yieldBy` aprende o multicraft). Três caminhos:
+  1. **ao fabricar** — o `TRADE_SKILL_ITEM_CRAFTED_RESULT` já trazia `data.itemID` junto de
+     `data.isEnchant`, e o handler de rendimento **lia esse número e jogava fora**. É o único lugar
+     em que o jogo entrega o itemID do pergaminho. Guarda por qualidade (`data.craftingQuality`);
+  2. **pela bolsa** — o pergaminho se chama igual à receita, então item na bolsa com nome idêntico
+     resolve na hora, sem fabricar;
+  3. **pelo scan da casa de leilões** — o `Own.lua` já lê nome e `itemID` de **todo** anúncio. O
+     encantamento que sobrou sem pergaminho fica anotado pelo nome (`LucroCraftDB.enchantPend`) e o
+     scan fecha a conta, reprecifica e avisa no log.
+- `LucroCraftDB.enchantItem[recipeID] = { [qualidade] = itemID }`, da conta inteira (o pergaminho é
+  o mesmo item em qualquer personagem). `ns.EnchantItem(recipeID, q)` devolve a qualidade pedida ou
+  a mais baixa conhecida, igual à convenção do `qualityItemIDs[1]`.
+- **O rendimento segue de fora:** encantamento não tem multicraft, e o `yieldBy` continua sem
+  receber essas fabricações. Conferido no teste, porque era fácil poluir ao mexer nesse handler.
+- Teste: **t134.lua** — o mapa (gravar, ler, qualidade, a mais baixa por padrão, recusar lixo), o
+  aprendizado no evento de craft com a checagem de que o `yieldBy` ficou limpo, o craft normal
+  continuando a contar rendimento, o pendente resolvido por nome (e não resolvido por nome errado),
+  e a ligação nos dois pontos de scan conferida na fonte.
+
+#### Correção do próprio conserto (relato: "fiz o reload no priest, scan da ah feito, porém não carregou")
+O primeiro desenho tinha uma **dependência de ordem** que eu não vi e cuja instrução eu passei
+errada. Ele rodou o scan da casa de leilões **antes** de abrir a profissão de Encantamento: naquele
+momento `LucroCraftDB.enchantPend` ainda era `nil`, a guarda curto-circuitou, e o scan passou por
+~50 mil anúncios sem resolver nada. Só depois a profissão anotou os 100+ pendentes — tarde demais.
+Confirmado no SavedVariables dele: `enchantPend` com 100+ nomes reais (`Enchant Chest - Mark of
+Nalorakk`...) e `enchantItem` **inexistente**.
+
+- **`ns.ItemIDByName(nome)`**: `C_Item.GetItemInfo` aceita **nome** e devolve o link, de onde sai o
+  itemID, para qualquer item que o cliente já tenha em cache — e o pergaminho está, porque ele já
+  vendeu esses encantamentos (achei "Enchant Chest - Mark of the Worldsoul" e "Enchant Weapon -
+  Berserker's Rage" no log de vendas do próprio addon, com nome **idêntico** ao da receita, o que
+  também confirma que o casamento por nome é válido). Sem ordem, sem bolsa, sem fabricar, sem scan.
+- O scan da profissão tenta **o nome primeiro**, depois a bolsa, e só então anota como pendente.
+- **`ns.ResolvePendingEnchants()`** varre a lista de pendentes e roda no fim do `RepriceAll` (login,
+  depois que o TSM carrega e com o cache de itens quente), então quem já tinha pendente não precisa
+  reabrir a profissão: resolve no próximo login e diz quantos no log.
+- Teste: t134.lua ganhou os blocos do `ItemIDByName` (nome conhecido, desconhecido, entradas
+  inválidas) e da varredura (resolve o que dá, **guarda o que o cliente ainda não conhece**, e some
+  com a lista quando fecha tudo).
+
+#### A qualidade do pergaminho (auditoria pedida pelo Rafael, priest + warlock)
+Com o conserto no ar, 6 encantamentos entraram e **38 seguiram pendentes** — e os 6 que entraram
+mostravam prejuízo em todos: resolveram **só a qualidade 1**, e o pergaminho q1 vale de 0,14o a
+5,00o. O dinheiro está no q3.
+
+Causa: as três qualidades do pergaminho **se chamam igual** (são 3 itemIDs com o mesmo nome), então
+o caminho por nome não distingue e tudo entra como q1.
+
+Era tentador deduzir pela ordem do itemID. **Não dá:** na tabela do CraftSim, 96 de 103
+encantamentos têm `q1 < q2 < q3`, mas **7 estão fora de ordem** (4 decrescentes, 3 embaralhados).
+Trocar q1 por q3 num cálculo de lucro é pior que não mostrar nada. Então a qualidade só entra por
+fonte definitiva:
+
+- **`C_TradeSkillUI.GetRecipeQualityItemIDs(recipeID)`**, tentada primeiro no scan: devolve um itemID
+  por tier. O CraftSim não a usa para encantamento (resolve pela tabela à mão), mas tentar é de
+  graça — e se o jogo responder, sai q1/q2/q3 certo de uma vez e os 38 pendentes somem juntos.
+- **o evento de craft**, que traz `craftingQuality` junto do itemID.
+- o caminho por nome continua, mas **só quando a API não responde**, e entra como q1 assumido.
+- Teste: t134.lua ganhou o bloco de qualidade (a ordem das tentativas conferida na fonte, mais o
+  craft de q1 e q3 gravando cada um no seu tier).
+
+- **Limitação que sobra:** se o cliente nunca viu o item (conta nova, encantamento que ele nunca
+  anunciou nem vendeu), o nome não resolve e a receita segue pendente até fabricar um, ter o
+  pergaminho na bolsa, ou um scan da AH que pegue o anúncio.
+
+#### O que a auditoria achou na Alfaiataria (e não é defeito)
+- **Nenhuma receita faltando:** 68 no priest e 29 no warlock, todas listadas e com custo calculado.
+- 27 (priest) e 6 (warlock) **sem preço de venda**, e isso está certo: são os conjuntos Martyr's,
+  Sunfire e Arcanoweave, as peças de profissão Thalassian e as 6 capas cosméticas. O `audit.prices`
+  dessas receitas tem preço dos reagentes e **nenhum registro para o item final** — o TSM devolveu
+  nil. Cruzando com a contabilidade dele: esses 28 itens não aparecem em **nenhuma** das 60 mil+
+  transações registradas (51.512 vendas e 6.121 compras no Goldrinn, 8.707 no Medivh).
+- O que diferencia: `Martyr's Vestments` é épico (IQ4) com bônus de ilvl e `lowVolume=true` —
+  equipamento fabricado que se entrega por **pedido**, não pela casa de leilões. As capas são IQ2
+  "Wardrobe Enhancements" com `difficulty=0` e sem tiers de qualidade: cosmético. Em contraste,
+  `Elegant Artisan's Alchemy Coveralls` (mesma categoria, tier anterior) tem preço completo do TSM.
+- Fica como ideia, não como correção: para equipamento vendido por pedido, a referência de valor é a
+  **comissão do pedido**, não um preço de AH que não existe.
+
+#### O tier do pergaminho (relato: "abri a profissão, fiz o scan da ah e mesmo assim não funcionou")
+A identificação **funcionou**, e mais do que ele viu: depois do scan da casa de leilões, 44
+pergaminhos achados, **0 pendentes**, e o Encantamento do priest saltou de 42 para **66 receitas**.
+O que não funcionou foi o número: **todos entraram no tier 1**, e 27 das 30 receitas apareciam com
+prejuízo. De fora, "não funcionou" — e com razão, porque uma lista de prejuízos falsos não serve.
+
+- **Causa:** as qualidades do pergaminho são **itens diferentes com o mesmo nome**. Resolver por nome
+  acha *um* dos tiers e não há como saber qual, então tudo entrava como q1. Pior: sem o id do outro
+  tier, a curva de concentração ficava sem o preço do item que ele de fato vende.
+- **A fonte definitiva existia e o TSM já usa:**
+  `C_TradeSkillUI.GetItemCraftedQualityByItemInfo(itemID)` devolve o tier de um item fabricado
+  (`LibTSMWoW/Source/API/TradeSkill.lua:400`, com `GetItemReagentQualityByItemInfo` como reserva).
+  Agora `ns.CraftedTier(itemID)` pergunta ao jogo, e o `LearnEnchantItem` sem tier explícito
+  **pergunta em vez de assumir q1**.
+- **`ns.RetierEnchants()`** refaz o que já está gravado, movendo cada pergaminho para o tier certo.
+  Roda no fim do `RepriceAll` (login) e diz quantos moveu — os 44 da conta dele se acertam sozinhos.
+- **O nome da receita passou a ser permanente** (`LucroCraftDB.enchantName`, migrando o
+  `enchantPend`). Antes era apagado no primeiro acerto, e por isso o **segundo tier nunca entrava**:
+  o scan da casa de leilões via o outro id e não tinha mais com o que casar.
+- **O scan monta a lista de qualidades** com o que aprendeu (`qIDs`), que é o que faz o cálculo usar
+  os dois tiers. Só monta com a sequência **completa a partir do tier 1**: com buraco no meio o
+  `#qIDs` mentiria e a qualidade sairia trocada.
+
+**Defeito grave que o teste pegou antes de ir para o jogo:** `ns.EnchantItem(recipeID, q)` caía para
+o tier mais baixo quando o tier pedido não existia. O laço que monta o `qIDs` nunca chegaria a `nil`
+e **giraria para sempre** — travaria o scan da profissão. Agora tier pedido é ou tem ou não tem.
+
+- Teste: t134.lua ganhou os blocos do tier (`CraftedTier`, aprender sem tier perguntando ao jogo,
+  `RetierEnchants` movendo o gravado errado e **não** mexendo no que o jogo não sabe, o segundo tier
+  entrando depois do primeiro, e o buraco no meio não virando lista).
+
+#### As receitas não aprendidas (relato: "carregou boa parte, porém não carregou os recipes que eu não sei fazer no priest")
+**Elas estão carregadas.** No dado dele o Encantamento do priest tem **28 receitas não aprendidas**
+guardadas em `entry.unknown`, com itemID e preço — `Enchant Boots - Shaladrassil's Roots` a 1.022o,
+`Enchant Chest - Mark of the Rootwarden` a 899o, e por aí. (Procurei no lugar errado na primeira
+passada: as não aprendidas ficam em `entry.unknown`, não em `entry.rows`.)
+
+O que as esconde é o filtro do terceiro grupo da lista de receitas, e é **por desenho**: receita não
+aprendida só aparece com `profit > 0` (`UI.lua`, "receitas desconhecidas: só as variações que dão
+lucro"). Faz sentido — o grupo existe para dizer o que vale a pena aprender. Mas com **um tier só**
+de pergaminho o lucro sai negativo, e aí elas somem. Das 28, 13 passam o filtro; das 14 que são
+pergaminho, só 3.
+
+Ou seja: **mesma causa raiz, não um defeito novo.** O conserto é completar o tier.
+
+- **Segunda fonte definitiva de tier:** `GetRecipeOutputItemData(recipeID, {}, nil, q)` — a **mesma**
+  API que o addon já usa para pegar o link do equipamento em cada qualidade (`OutLinkAt`). Para
+  encantamento nunca tinha sido tentada, porque o `GetOutputItemID` a chama **sem** qualidade, e sem
+  qualidade ela não responde para encantamento. Com a qualidade explícita é outra consulta.
+  - só aceita o resultado quando os tiers devolvem itens **diferentes**: um id repetido em todas as
+    qualidades não diz nada sobre tier;
+  - um id só para todas as qualidades entra sem tier, e aí o `CraftedTier` decide;
+  - não repete o trabalho quando o tier 2 já é conhecido, para scan repetido não pagar as chamadas.
+- **E enquanto falta tier, a Auditoria passa a dizer.** `ns.Provenance` devolve `nivel = "fraco"` com
+  "só uma qualidade do pergaminho é conhecida: o lucro está incompleto". Mostrar prejuízo com cara de
+  certeza, quando o preço é de um tier e o custo é do craft inteiro, é pior que admitir o furo.
+  Receita que não é encantamento não é afetada (conferido no teste).
+- Teste: t134.lua ganhou o bloco das não aprendidas (o filtro de lucro confirmado na fonte do
+  `UI.lua`), a ordem das tentativas da API nova, e o aviso de tier incompleto aparecendo só para
+  encantamento com um tier.
+
+### 12. Travamento relatado no CurseForge: infinito chegando no formatador de ouro do jogo
+Primeiro bug reportado por alguém de fora. Comentário do **Lokir** em 19/10:
+
+```
+17x integer overflow attempting to store nan
+Blizzard_SharedXML/FormattingUtil.lua:92   GetMoneyString
+RoyalRevenue/Craft/Pricing.lua:481
+RoyalRevenue/Craft/UI.lua:1079
+locals: money = Infinite · goldString = "nan|TInterface\MoneyFrame\UI-GoldIcon:0:0:2:0|t"
+```
+
+- **Causa:** `if r.concCost and r.concSale then ... r.perConc = r.concProfit / r.concEff`.
+  Com `concCost = 0` a guarda **passava**, porque **`0` é verdadeiro em Lua** — regra 2 do CLAUDE.md,
+  e a **terceira** vez nesta base (o ajuste de saldo do Livro e o `count` do invoice foram as outras
+  duas). O `EffectiveConc` devolvia o próprio `0` no ramo sem stats, e `concProfit / 0` = infinito.
+  O infinito ia para o `GetMoneyString` do jogo e derrubava a interface.
+- **Por que o fixture não pegava:** com stats ligados o `EffectiveConc` cai em
+  `math.max(conc - ing*refund, 1)`, e o piso de 1 salvava. O estouro exige o outro ramo —
+  `not Cfg("useStats") or not st or st.ing <= 0` —, que é o de quem joga com os stats **desligados**
+  ou numa receita sem engenhosidade.
+- **`concCost = 0` é a receita cuja qualidade de cima sai sem gastar concentração** — justamente o
+  caso que o Rafael levantou nesta sessão (pedido pedindo Q4 que a perícia já alcança). Isso nunca
+  foi jogada de concentração: é craft normal numa qualidade melhor, e "ouro por ponto" não existe
+  ali. Agora marca `r.concFree` e **preserva o `concProfit`**, para a receita não desaparecer.
+- **Conserto em três níveis**, porque um só não bastava:
+  1. a divisão exige `concCost > 0` e `concEff > 0`;
+  2. `EffectiveConc` devolve `nil` para `conc <= 0` em vez de devolver o zero;
+  3. `Pricing.Finito(n)` barra `nan` e `±infinito` no `FormatGold`/`FormatMoney`. Venha de onde vier
+     uma divisão por zero futura, a tela mostra travessão em vez de derrubar a interface.
+- Teste: **t135.lua**, com a reprodução medida nas duas pontas. Na v1.39.4:
+  `concEff=0 · perConc=-1.#INF · FormatMoney="-1.#INFc"`. Na v1.40.0: `nil`, `nil` e `—`.
+  Mais a varredura que confirma zero campo com infinito/nan em toda a fixture.

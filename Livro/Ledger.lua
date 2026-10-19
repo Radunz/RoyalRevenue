@@ -634,7 +634,7 @@ local function MailOpen() return open.mail or MailBusy() end
 
 -- Recompensas de pedidos de fabricação (pedidos de NPC) chegam pelo correio. Ao abrir a caixa, anota
 -- quais itens vêm dessas cartas: quando eles entram na bolsa, são receita de "Pedidos de fabricação".
-local mailOrder = { items = {}, any = false, seller = false }
+local mailOrder = { items = {}, mine = {}, any = false, seller = false }
 local ORDER_WORDS = { "Crafting Order", "Pedido de fabrica", "Artisan", "Artesã", "Patron", "Patrono", "Consortium", "Consórcio" }
 local function IsOrderMail(i, sender, subject)
 	if C_Mail and C_Mail.GetCraftingOrderMailInfo then
@@ -645,8 +645,24 @@ local function IsOrderMail(i, sender, subject)
 	for _, w in ipairs(ORDER_WORDS) do if text:find(w, 1, true) then return true end end
 	return false
 end
+-- De que lado do pedido eu estou?
+--   "cliente" = eu encomendei: o que chega e producao que eu paguei (reagente + comissao),
+--              nao receita -- a receita vem depois, quando vender.
+--   "fabricante" = eu fabriquei: a comissao e a recompensa sao receita de verdade.
+-- A API marca a OUTRA parte: crafterName preenchido = quem fabricou foi outro, logo o cliente
+-- sou eu. Pedido que nao se completou devolve material proprio, que tambem nao e receita.
+local function OrderSide(i)
+	if not (C_Mail and C_Mail.GetCraftingOrderMailInfo) then return nil end
+	local ok, info = pcall(C_Mail.GetCraftingOrderMailInfo, i)
+	if not ok or type(info) ~= "table" then return nil end
+	local fulfill = Enum and Enum.RcoCloseReason and Enum.RcoCloseReason.RcoCloseFulfill
+	if fulfill and info.reason and info.reason ~= fulfill then return "cliente" end
+	if info.crafterName then return "cliente" end
+	if info.customerName then return "fabricante" end
+	return nil
+end
 local function ScanInbox()
-	mailOrder = { items = {}, any = false, seller = false }
+	mailOrder = { items = {}, mine = {}, any = false, seller = false }
 	if not (GetInboxNumItems and GetInboxHeaderInfo) then return end
 	for i = 1, GetInboxNumItems() do
 		local _, _, sender, subject, money, _, _, itemCount = GetInboxHeaderInfo(i)
@@ -656,9 +672,15 @@ local function ScanInbox()
 		end
 		if IsOrderMail(i, sender, subject) then
 			mailOrder.any = true
+			local lado = OrderSide(i)
 			for j = 1, (itemCount or 0) do
 				local _, itemID, _, count = GetInboxItem(i, j)
-				if itemID then mailOrder.items[itemID] = (mailOrder.items[itemID] or 0) + (count or 1) end
+				if itemID then
+					mailOrder.items[itemID] = (mailOrder.items[itemID] or 0) + (count or 1)
+					if lado == "cliente" then
+						mailOrder.mine[itemID] = (mailOrder.mine[itemID] or 0) + (count or 1)
+					end
+				end
 			end
 		end
 	end
@@ -857,6 +879,13 @@ local function OnLootMsg(msg)
 	-- recompensa de pedido de fabricação tirada do correio: receita dos pedidos
 	if MailOpen() and (mailOrder.items[id] or 0) > 0 then
 		mailOrder.items[id] = math.max(0, mailOrder.items[id] - qty)
+		-- pedido que EU encomendei: o item que chega eu paguei (reagente + comissão). Lançar como
+		-- receita conta duas vezes, porque a venda na casa de leilões vem depois.
+		if (mailOrder.mine[id] or 0) > 0 then
+			mailOrder.mine[id] = math.max(0, mailOrder.mine[id] - qty)
+			Ledger.ItemConv(id, qty, L["Pedido de fabricação que você encomendou"])
+			return
+		end
 		Ledger.AddItem("orders", L["Recompensas pelo correio"], id, qty)
 		return
 	end
