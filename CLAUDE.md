@@ -109,6 +109,13 @@ Os dois módulos são isolados: cada um tem seu `ns.L`, `ns.UI` e `ns.CharKey`. 
 5. **Valores secretos (Midnight)**: em combate e instância, argumentos de evento, nomes de NPC, tooltips e auras podem vir "secretos". Comparar ou concatenar um deles dá erro.
    - Todo handler que compara argumento começa com `if root.AnySecret(a1, a2, ...) then return end`.
    - No Livro, usar `Ledger.Safe(v)`.
+   - **Guarda de tipo NÃO protege** (v1.40.1): `type()` de um número secreto devolve `"number"`, e
+     `(v or 0)` não cai no padrão porque secreto não é `nil`. O `type(cd.duration) == "number" and
+     cd.duration > 2` do Gather passava e estourava na comparação. Só `root.AnySecret` protege.
+   - Famílias já mordidas: `C_Spell.GetSpellCooldown`, `C_TradeSkillUI.GetRecipeCooldown` e campos
+     de aura (`a.expirationTime`). O `t136.lua` varre essas três exigindo guarda por perto.
+   - Não vêm secretos (já conferido, não precisa guardar): preço do TSM/Auctionator, dados da janela
+     de profissão, atlas, `UnitStat("player")` e métodos do CraftSim.
 6. **Combate**: botão seguro (`Canvas:SecureItem`, `SecureActionButtonTemplate`) só é criado ou movido fora de combate (`InCombatLockdown`).
 7. **Saída de texto**: nunca `print` direto. Usar `root.Out` / `ns.Print` / `ns.Log`, que vão para a aba de chat "Log". Os arquivos que imprimem têm `local print = function(...) return root.Out(...) end`.
 8. **Desempenho** (v1.25.0): não desfazer os caches sem motivo.
