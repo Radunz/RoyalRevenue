@@ -528,7 +528,13 @@ function Invest._RenderGathering(cv, e, W)
 		local _, spellID = C_Item.GetItemSpell(itemID)
 		if not spellID then return nil end
 		local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, spellID)
-		if ok and a and a.expirationTime then return math.max(0, a.expirationTime - GetTime()) end
+		-- Aura e um dos casos que a regra 5 cita: em combate o campo vem secreto, e fazer conta com
+		-- ele estoura igual ao cooldown do Gather. Isto roda no handler de UNIT_AURA, que dispara
+		-- justamente em combate. `a.expirationTime` nao ser nil nao garante que da para somar.
+		local fim = a and a.expirationTime
+		if ok and not root.AnySecret(fim) and type(fim) == "number" then
+			return math.max(0, fim - GetTime())
+		end
 		return nil
 	end
 	local toolSlot = prof and ns.Gather.ToolSlot and ns.Gather.ToolSlot(prof)

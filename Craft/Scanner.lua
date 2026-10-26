@@ -1572,6 +1572,9 @@ local function CollectRows(targetID, unknown)
 					local cdInfo
 					if C_TradeSkillUI.GetRecipeCooldown then
 						local okR, cool, isDay, charges, maxCharges = pcall(C_TradeSkillUI.GetRecipeCooldown, recipeID)
+						-- mesma familia de API do GetSpellCooldown que estourou com valor secreto:
+						-- `(v or 0) > 0` nao protege, porque numero secreto nao e nil
+						if okR and root.AnySecret(cool, charges, maxCharges) then okR = false end
 						if okR and ((maxCharges or 0) > 0 or (cool or 0) > 0) then
 							cdInfo = { cool = cool or 0, day = isDay or nil, charges = charges or 0, max = maxCharges or 0, t = time() }
 						end

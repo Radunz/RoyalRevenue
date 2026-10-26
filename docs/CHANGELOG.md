@@ -1968,3 +1968,43 @@ locals: money = Infinite · goldString = "nan|TInterface\MoneyFrame\UI-GoldIcon:
 - Teste: **t135.lua**, com a reprodução medida nas duas pontas. Na v1.39.4:
   `concEff=0 · perConc=-1.#INF · FormatMoney="-1.#INFc"`. Na v1.40.0: `nil`, `nil` e `—`.
   Mais a varredura que confirma zero campo com infinito/nan em toda a fixture.
+
+## v1.40.1 — valor secreto comparado (BugGrabber do hunter)
+Erro capturado no BugGrabber, sessão 239, 26/10 08:46, na coleta do Nazdru:
+
+```
+Craft/Gather.lua:269: attempt to compare field 'duration'
+(a secret number value, while execution tainted by 'RoyalRevenue')
+locals: cd = { duration=<secret number>, startTime=<secret number>, modRate=<secret number> }
+        spellID = 1270573
+```
+
+- **Causa, e a parte fina:** o código **já tinha** guarda de tipo —
+  `if ok and cd and type(cd.duration) == "number" and cd.duration > 2 then` — e ela **não protege**.
+  `type()` de um número secreto devolve `"number"`: os locals do relato mostram literalmente
+  `(*temporary)="number"`. A guarda passa, e a comparação seguinte estoura. Só `issecretvalue`
+  (`root.AnySecret`) protege. É a regra 5 do CLAUDE.md, e duas linhas acima, na **mesma função**, o
+  `name` já era conferido com `issecretvalue` — o cooldown não era.
+- O cenário: Overload numa coleta dentro de instância ou em combate, onde o recarregamento do
+  feitiço vem secreto.
+- **Irmãos consertados na mesma passada**, achados por varredura:
+  - `InvestView.lua`: `a.expirationTime` de uma **aura** usada em conta. Aura é um dos casos que a
+    regra 5 cita, e isso roda no handler de `UNIT_AURA`, que dispara justamente em combate;
+  - `Scanner.lua` e `Salvage.lua`: os retornos de `GetRecipeCooldown` — mesma família de API do
+    `GetSpellCooldown` que estourou. `(v or 0) > 0` também não protege, porque número secreto não é
+    `nil`.
+  - Os outros acertos da varredura foram descartados com motivo: preço do TSM/Auctionator, dados da
+    janela de profissão, atlas e `UnitStat("player")` não vêm secretos, e
+    `GetConcentrationCostForSkill` é método do CraftSim, não API do jogo.
+- Teste: **t136.lua**. Demonstra a armadilha (`type(secreto) == "number"` e `(secreto or 0) > 0`
+  passando), cobre o `AnySecret` com vários argumentos e sem a API no cliente, confere os quatro
+  pontos guardados, e **varre** as famílias `GetSpellCooldown` / `GetRecipeCooldown` /
+  `expirationTime` exigindo guarda por perto — conferido que a varredura falha de verdade quando uma
+  guarda é removida, senão não valeria nada.
+
+### O outro erro do BugGrabber era velho
+`Craft/UI.lua:245: attempt to call a nil value`, 24 vezes em 18/10, com `aba=10` (Auditoria) e um
+recipeID nos temporários: o laço que acompanha a receita selecionada chamando algo inexistente.
+Sessão **155** contra a **240** atual, e foi no meio do dia em que eu estava reescrevendo o `UI.lua`
+— estado transitório de um `/reload` com o código entre duas formas. As quatro funções do laço
+(`AuditWatch`, `AuditFollowing`, `SelectedRecipeID`, `AuditFollow`) existem hoje, e o t136 fixa isso.

@@ -266,7 +266,13 @@ local function OnSpell(spellID)
 	ovAt = GetTime()
 	C_Timer.After(0.5, function()
 		local ok, cd = pcall(C_Spell.GetSpellCooldown, spellID)
-		if ok and cd and type(cd.duration) == "number" and cd.duration > 2 then ovCD = cd.duration end
+		-- `type()` de um valor secreto devolve "number": a guarda de tipo NAO protege, e a
+		-- comparacao seguinte estoura. Foi o erro do BugGrabber de 26/10 na coleta do Nazdru
+		-- ("attempt to compare field 'duration' (a secret number value)"). Em masmorra e em combate
+		-- o recarregamento do feitico vem secreto -- regra 5 do CLAUDE.md. O `name`, duas linhas
+		-- acima, ja era conferido com issecretvalue; o cooldown nao era.
+		local dur = cd and cd.duration
+		if ok and not root.AnySecret(dur) and type(dur) == "number" and dur > 2 then ovCD = dur end
 		if open and GetTime() - (open.at or 0) < 20 and not open.rec.ov then
 			open.rec.ov, open.rec.ovcd = true, ovCD
 			open.until_ = GetTime() + 120
