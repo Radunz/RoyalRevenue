@@ -238,14 +238,31 @@ function Consum.Groups(me, allChars, usedGroups)
 			local skip = false
 			for _, x in ipairs(s.ids) do if inUsed[char] and inUsed[char][x] then skip = true end end
 			if id and not skip then
-				-- tem/precisa somado entre as qualidades (uma vale pela outra); comprar é uma OU outra, não as duas
-				local own = 0
-				for _, x in ipairs(s.ids) do own = own + C.own(char, x) end
-				local wb = 0
-				for _, x in ipairs(s.ids) do wb = wb + C.warband(x) end
-				local m = { key = id, ids = { id }, buyId = id, need = s.need, uses = {}, own = own, wb = math.min(wb, math.max(0, s.need - own)),
+				-- Tem/precisa somado entre as qualidades (uma vale pela outra); comprar é uma OU outra.
+				-- AQUI a conta é diferente do resto da lista de compras: consumível só serve se
+				-- estiver NA BOLSA. O que está no banco (dele ou do bando) não entra na masmorra,
+				-- mas também não deve virar "compre" -- ele já tem, é só buscar.
+				local logado = (char == ns.CharKey())
+				local emBolsa, noBanco, noBando = 0, 0, 0
+				for _, x in ipairs(s.ids) do
+					if logado and ns.Stock and ns.Stock.InBags then
+						local b, k, w = ns.Stock.InBags(x)
+						emBolsa, noBanco, noBando = emBolsa + b, noBanco + k, noBando + w
+					else
+						-- outro personagem: o retrato guardado soma bolsa e banco sem separar, então
+						-- não dá para afirmar que está na bolsa. Entra como "tem, em algum lugar".
+						noBanco = noBanco + C.own(char, x)
+						noBando = noBando + C.warband(x)
+					end
+				end
+				local falta = math.max(0, s.need - emBolsa)
+				-- o que dá para buscar no banco cobre a falta antes de pensar em comprar
+				local pegar = math.min(noBanco + noBando, falta)
+				local m = { key = id, ids = { id }, buyId = id, need = s.need, uses = {},
+					own = emBolsa, bank = noBanco, wb = math.min(noBando, falta),
+					fetch = pegar, bagsOnly = true, naoSabeBolsa = not logado or nil,
 					alts = 0, queue = true, note = s.note, why = s.why, hasQuality = #s.ids > 1 }
-				m.buy = math.max(0, s.need - own - m.wb)
+				m.buy = math.max(0, falta - pegar)
 				table.insert(g.order, m)
 			end
 		end

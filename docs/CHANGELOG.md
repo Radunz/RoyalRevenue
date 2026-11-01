@@ -2008,3 +2008,31 @@ recipeID nos temporários: o laço que acompanha a receita selecionada chamando 
 Sessão **155** contra a **240** atual, e foi no meio do dia em que eu estava reescrevendo o `UI.lua`
 — estado transitório de um `/reload` com o código entre duas formas. As quatro funções do laço
 (`AuditWatch`, `AuditFollowing`, `SelectedRecipeID`, `AuditFollow`) existem hoje, e o t136 fixa isso.
+
+## v1.40.2 — consumível no banco não entra na masmorra (relato do Rafael)
+"Na aba Mercado > Consumíveis diz que tenho comida, porém no banco e em outros personagens não me
+adianta: tenho que ter elas na bag para poder usar na dg."
+
+- **Causa:** `Consum.Groups` usava `Plan.Count.own` → `OwnCountRaw` →
+  `C_Item.GetItemCount(id, true, false, true, false)` — `includeBank` e `includeReagentBank`
+  **ligados**. Para **craftar** isso está certo, e é de propósito: o `Stock.Usable` soma bolsa +
+  banco do personagem + banco do bando, porque tudo aquilo serve para fabricar. Para **consumível**
+  não serve: o que está no banco não entra na masmorra com você.
+- **O conserto não é mandar comprar.** Seria gastar ouro no que ele já tem. São **três** estados, e
+  agora a lista mostra os três:
+  - **na bolsa** → pronto;
+  - **no banco** (dele ou do bando) → `pegue N no banco`, em amarelo, e **não** entra no "comprar";
+  - **nem um** → comprar, como antes.
+- `Stock.InBags(itemID)` expõe a divisão que o `RawUsable` **já calculava** e não devolvia: na bolsa,
+  no banco do personagem, no banco do bando. O `Stock.Usable` segue somando tudo — não mexi nele,
+  porque para o craft a conta antiga é a correta (conferido no teste).
+- **Outro personagem: o addon admite que não sabe.** O retrato guardado
+  (`LucroCraftDB.inv[char].items`) soma bolsa e banco sem separar, então não há como afirmar que está
+  na bolsa. Esse número entra como "tem, em algum lugar" e a linha diz
+  "(de outro personagem: pode estar no banco)". Melhor que fingir precisão que o dado não tem.
+- O tooltip trocou "Tem (bolsa + banco)" por "Na bolsa (é o que serve na masmorra)" mais as linhas
+  do banco, para a lista de consumíveis. As outras listas (Plano, Fila) seguem com o rótulo antigo,
+  porque lá a conta antiga é a certa.
+- Teste: **t137.lua** — a divisão do `Stock.InBags`, o caso exato do relato (precisa 20, bolsa 0,
+  banco 20 → não diz que tem e não manda comprar), os cinco estados de bolsa/banco, o banco do bando
+  contando como "pegar", o alt admitindo que não sabe, e a aba Comprar desenhando dentro do canvas.

@@ -87,6 +87,17 @@ function Stock.Usable(itemID)
 	end
 	return total, bags, wb
 end
+-- Consumivel tem de estar NA BOLSA para servir: no banco ou em outro personagem nao entra na
+-- masmorra com voce. O Stock.Usable soma bolsa + banco + banco do bando de proposito, porque para
+-- CRAFTAR tudo isso serve; para consumivel nao. O RawUsable ja separava os tres -- so nao expunha.
+-- Devolve: na bolsa, no banco deste personagem, no banco do bando.
+function Stock.InBags(itemID)
+	if not (itemID and C_Item and C_Item.GetItemCount) then return 0, 0, 0 end
+	local okB, bags = pcall(C_Item.GetItemCount, itemID, false, false, false, false)
+	local _, _, wb, bank = RawUsable(itemID)
+	return (okB and type(bags) == "number") and bags or 0, bank or 0, wb or 0
+end
+
 function Stock.OnBuy(itemID, qty)
 	if not (itemID and qty and qty > 0) then return end
 	local b = bought[itemID]

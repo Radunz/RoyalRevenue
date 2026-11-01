@@ -820,8 +820,17 @@ local function MatTip(m)
 		tt:SetItemByID(m.buyId)
 		tt:AddLine(" ")
 		tt:AddDoubleLine(L["Precisa"], root.Num(m.need, 0), 1, 0.82, 0, 1, 1, 1)
-		tt:AddDoubleLine(L["Tem (bolsa + banco)"], root.Num(m.own, 0), 1, 0.82, 0, 1, 1, 1)
-		if m.wb > 0 then tt:AddDoubleLine(L["Banco do bando usado"], root.Num(m.wb, 0), 1, 0.82, 0, 1, 1, 1) end
+		if m.bagsOnly then
+			tt:AddDoubleLine(L["Na bolsa (é o que serve na masmorra)"], root.Num(m.own, 0), 1, 0.82, 0, 1, 1, 1)
+			if (m.bank or 0) > 0 then tt:AddDoubleLine(L["No banco (precisa buscar)"], root.Num(m.bank, 0), 1, 0.82, 0, 1, 0.82, 0.3) end
+			if m.wb > 0 then tt:AddDoubleLine(L["No banco do bando (precisa buscar)"], root.Num(m.wb, 0), 1, 0.82, 0, 1, 0.82, 0.3) end
+			if m.naoSabeBolsa then
+				tt:AddLine(L["Este número é de outro personagem: o retrato guardado soma bolsa e banco, então não dá para afirmar que está na bolsa."], 0.6, 0.6, 0.6, true)
+			end
+		else
+			tt:AddDoubleLine(L["Tem (bolsa + banco)"], root.Num(m.own, 0), 1, 0.82, 0, 1, 1, 1)
+			if m.wb > 0 then tt:AddDoubleLine(L["Banco do bando usado"], root.Num(m.wb, 0), 1, 0.82, 0, 1, 1, 1) end
+		end
 		if m.alts > 0 then tt:AddDoubleLine(L["Nos alts"], root.Num(m.alts, 0), 1, 0.82, 0, 1, 1, 1) end
 		tt:AddDoubleLine(L["Comprar"], root.Num(m.buy, 0), 1, 0.82, 0, 0.4, 0.8, 1)
 		if m.why then tt:AddLine(" "); tt:AddLine(m.note or "", 0.4, 0.8, 1); tt:AddLine(m.why, 1, 1, 1, true) end
@@ -1118,8 +1127,20 @@ function Buy.Render(cv)
 				link = select(2, C_Item.GetItemInfo(m.buyId)), tip = MatTip(m) })
 			local name = ns.Visual.ItemName(m.buyId)
 			lc:Text(X_NAME, y + 6, (have and "|cff9d9d9d" or "|cffffffff") .. name .. "|r", GameFontHighlight, X_PRICE - X_NAME - 8)
-			local stock = m.wb > 0 and string.format(L["precisa %s · tem %s · bando %s"], root.Num(m.need, 0), root.Num(m.own, 0), root.Num(m.wb, 0))
-				or string.format(L["precisa %s · tem %s"], root.Num(m.need, 0), root.Num(m.own, 0))
+			local stock
+			if m.bagsOnly then
+				-- Consumível: o que vale é o que está NA BOLSA. O que está no banco não entra na
+				-- masmorra, mas também não é para comprar de novo -- é para buscar.
+				stock = string.format(L["precisa %s · na bolsa %s"], root.Num(m.need, 0), root.Num(m.own, 0))
+				if (m.fetch or 0) > 0 then
+					stock = stock .. string.format(L[" · |cffffd100pegue %s no banco|r|cff9d9d9d"], root.Num(m.fetch, 0))
+				end
+				if m.naoSabeBolsa then stock = stock .. L[" (de outro personagem: pode estar no banco)"] end
+			elseif m.wb > 0 then
+				stock = string.format(L["precisa %s · tem %s · bando %s"], root.Num(m.need, 0), root.Num(m.own, 0), root.Num(m.wb, 0))
+			else
+				stock = string.format(L["precisa %s · tem %s"], root.Num(m.need, 0), root.Num(m.own, 0))
+			end
 			if m.craft and not have then
 				local ctxt = m.craftBetter and string.format(L[" · |cff66ccfffabricar %s/un%s|r"], G(m.craft.unit), m.craftSave and string.format(" (-%d%%)", math.min(99, math.floor(m.craftSave * 100))) or "")
 					or string.format(L[" · |cff9d9d9dfabricar %s/un|r"], G(m.craft.unit))

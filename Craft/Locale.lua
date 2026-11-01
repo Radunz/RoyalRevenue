@@ -1749,5 +1749,13 @@ local T = {
 	["%d pergaminho(s) de encantamento identificado(s) pelo nome."] = "%d enchanting vellum(s) identified by name.",
 	["%d pergaminho(s) movido(s) para a qualidade certa."] = "%d vellum(s) moved to the right quality.",
 	["só uma qualidade do pergaminho é conhecida: o lucro está incompleto"] = "only one vellum quality is known: the profit is incomplete",
+	-- consumivel: bolsa x banco
+	["precisa %s · na bolsa %s"] = "needs %s · in bags %s",
+	[" · |cffffd100pegue %s no banco|r|cff9d9d9d"] = " · |cffffd100take %s from the bank|r|cff9d9d9d",
+	[" (de outro personagem: pode estar no banco)"] = " (another character: may be in the bank)",
+	["Na bolsa (é o que serve na masmorra)"] = "In bags (what actually works in a dungeon)",
+	["No banco (precisa buscar)"] = "In the bank (needs fetching)",
+	["No banco do bando (precisa buscar)"] = "In the warband bank (needs fetching)",
+	["Este número é de outro personagem: o retrato guardado soma bolsa e banco, então não dá para afirmar que está na bolsa."] = "This number is from another character: the stored snapshot adds bags and bank together, so there is no way to say it is in the bags.",
 }
 for k, v in pairs(T) do L[k] = v end
